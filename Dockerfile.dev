@@ -1,0 +1,22 @@
+# Dockerfile para desarrollo - Books API
+FROM oven/bun:1-alpine
+
+WORKDIR /app
+
+# Instalar dependencias del sistema si son necesarias
+RUN apk add --no-cache git
+
+# Copiar archivos de dependencias
+COPY package.json bun.lockb* ./
+
+# Instalar todas las dependencias (incluyendo dev)
+RUN bun install
+
+# Copiar el resto del código (se sobrescribirá con el volume en docker-compose)
+COPY . .
+
+# Exponer el puerto
+EXPOSE 3000
+
+# Comando por defecto (se puede sobrescribir en docker-compose)
+CMD ["bun", "run", "dev"]
