@@ -1,5 +1,7 @@
 {
   "name": "books-api",
+  "version": "0.0.0",
+  "description": "Books API built with Hono and Bun",
   "scripts": {
     "dev": "bun run --hot src/index.ts",
     "docker:dev": "docker-compose up",

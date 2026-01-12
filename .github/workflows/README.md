@@ -4,7 +4,23 @@ Este directorio contiene los workflows de CI/CD para la Books API.
 
 ## Workflows disponibles
 
-### 1. CI - Test and Build ([ci.yml](ci.yml))
+### 1. Auto Release ([auto-release.yml](auto-release.yml)) ⭐ NUEVO
+
+**Se ejecuta en:**
+- Push a `main`
+
+**Funciones:**
+- Analiza commits usando Conventional Commits
+- Calcula automáticamente la siguiente versión (semver)
+- Crea/actualiza PR con CHANGELOG y nueva versión
+- Cuando se mergea el PR:
+  - Crea GitHub Release con notas automáticas
+  - Publica imágenes Docker con tags de versión
+  - Genera attestation de provenance
+
+**Importante:** Este es el método **recomendado** para crear releases. Lee [CONTRIBUTING.md](../../CONTRIBUTING.md) para aprender sobre Conventional Commits.
+
+### 2. CI - Test and Build ([ci.yml](ci.yml))
 
 **Se ejecuta en:**
 - Push a `main` o `develop`
@@ -16,7 +32,7 @@ Este directorio contiene los workflows de CI/CD para la Books API.
 - Prueba la construcción de la imagen Docker
 - Verifica que la aplicación se inicie correctamente
 
-### 2. Build and Push Docker Image ([docker-build.yml](docker-build.yml))
+### 3. Build and Push Docker Image ([docker-build.yml](docker-build.yml))
 
 **Se ejecuta en:**
 - Push a `main` o `develop`
@@ -35,7 +51,9 @@ Este directorio contiene los workflows de CI/CD para la Books API.
 - Crea attestation de provenance
 - Soporta múltiples plataformas (amd64, arm64)
 
-### 3. Release ([release.yml](release.yml))
+### 4. Release (Manual) ([release.yml](release.yml))
+
+**⚠️ Deprecado:** Usa el workflow Auto Release en su lugar.
 
 **Se ejecuta en:**
 - Push de tags con formato `v*.*.*`
@@ -74,14 +92,53 @@ Por defecto, las imágenes son privadas. Para hacerlas públicas:
 
 ## Uso
 
-### Desarrollo normal
+### Desarrollo normal con Auto Release (Recomendado)
 
-Cada push a `main` o `develop` ejecutará:
-1. ✅ Tests y linting
-2. ✅ Build de Docker
-3. 🚀 Push de imagen a GHCR con tag de la rama
+```bash
+# 1. Hacer commits usando Conventional Commits
+git commit -m "feat: add user profile endpoint"
+git commit -m "fix: resolve authentication bug"
+git push origin main
 
-### Crear un release
+# 2. Release Please analiza los commits y:
+# - Abre/actualiza un PR automáticamente
+# - Título: "chore(main): release X.Y.Z"
+# - Incluye CHANGELOG.md actualizado
+
+# 3. Revisa el PR y verifica:
+# - La versión calculada es correcta
+# - El CHANGELOG está bien
+
+# 4. Mergea el PR
+
+# 5. Automáticamente se crea:
+# ✅ GitHub Release con notas
+# ✅ Tag vX.Y.Z
+# 🚀 Imágenes Docker:
+#    - ghcr.io/OWNER/books-api:X.Y.Z
+#    - ghcr.io/OWNER/books-api:latest
+```
+
+**Lee [CONTRIBUTING.md](../../CONTRIBUTING.md) para aprender sobre Conventional Commits.**
+
+### Formato de Commits
+
+```bash
+# Nueva funcionalidad (incrementa MINOR: 1.0.0 → 1.1.0)
+git commit -m "feat: add book search endpoint"
+
+# Corrección de bug (incrementa PATCH: 1.0.0 → 1.0.1)
+git commit -m "fix: resolve CORS error"
+
+# Breaking change (incrementa MAJOR: 1.0.0 → 2.0.0)
+git commit -m "feat!: redesign authentication API"
+```
+
+### Crear un release manual (Método antiguo)
+
+**⚠️ No recomendado.** Usa Auto Release en su lugar.
+
+Si necesitas crear un release manual:
 
 ```bash
 # 1. Asegúrate de estar en main
@@ -95,14 +152,7 @@ git tag v1.0.0
 git push origin v1.0.0
 ```
 
-Esto activará automáticamente:
-1. ✅ Creación del release en GitHub
-2. ✅ Generación del changelog
-3. 🚀 Build y push de imagen con tags:
-   - `ghcr.io/OWNER/books-api:1.0.0`
-   - `ghcr.io/OWNER/books-api:1.0`
-   - `ghcr.io/OWNER/books-api:1`
-   - `ghcr.io/OWNER/books-api:latest`
+Esto activará el workflow `release.yml` (deprecado)
 
 ### Ejecutar workflow manualmente
 
