@@ -49,10 +49,17 @@ Este directorio contiene los workflows de CI/CD para la Books API.
 
 ### 1. Habilitar GitHub Container Registry
 
-Las imágenes se publican automáticamente en `ghcr.io`. No necesitas configuración adicional, pero asegúrate de que:
+Las imágenes se publican **exclusivamente** en GitHub Container Registry (`ghcr.io`). No usamos Docker Hub ni otros registros.
+
+No necesitas configuración adicional, pero asegúrate de que:
 
 1. El repositorio tenga permisos de escritura para packages
 2. Las GitHub Actions tengan permisos para escribir en GHCR (ya configurado en los workflows)
+
+**Importante:** Todas las imágenes se almacenan en:
+```
+ghcr.io/OWNER/books-api:TAG
+```
 
 ### 2. Hacer el paquete público (opcional)
 

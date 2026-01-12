@@ -51,17 +51,18 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Build Docker image (test)
+      - name: Build Docker image (test only)
         uses: docker/build-push-action@v5
         with:
           context: .
           file: ./Dockerfile
           push: false
+          load: true
           tags: books-api:test
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - name: Test Docker image
+      - name: Test Docker image starts correctly
         run: |
           docker run -d --name test-container -p 3000:3000 books-api:test
           sleep 5
