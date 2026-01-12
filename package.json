@@ -4,7 +4,7 @@
   "description": "Books API built with Hono and Bun",
   "scripts": {
     "dev": "bun run --hot src/index.ts",
-    "prepare": "husky install",
+    "prepare": "[ -d .git ] && husky install || true",
     "docker:dev": "docker-compose up",
     "docker:dev:build": "docker-compose up --build",
     "docker:down": "docker-compose down",

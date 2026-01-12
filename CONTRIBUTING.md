@@ -216,6 +216,8 @@ bun install
 bunx husky install
 ```
 
+**Nota:** Husky solo se instala en desarrollo (cuando existe `.git`). En producción (Docker builds) se omite automáticamente.
+
 **Ejemplo de validación:**
 ```bash
 # ✅ Esto funcionará:
