@@ -33,6 +33,8 @@ docker run -p 3000:3000 ghcr.io/parraletz/books-api:latest
 
 Este proyecto usa **Conventional Commits** para generar releases automáticamente.
 
+**✅ Husky configurado:** Los commits se validan automáticamente antes de aceptarlos.
+
 ### Cómo contribuir
 
 ```bash
@@ -45,6 +47,8 @@ git commit -m "fix: resolve authentication error"
 # Breaking change
 git commit -m "feat!: redesign API endpoints"
 ```
+
+**Validación automática:** Si el formato es incorrecto, el commit será rechazado con un mensaje de error claro.
 
 Al hacer push a `main`, Release Please creará automáticamente un PR con:
 - Nueva versión calculada

@@ -198,9 +198,42 @@ git commit -m "Added new feature"  # Debería ser: feat: add new feature
 
 ## Herramientas Útiles
 
-### Commitizen (Recomendado)
+### Git Hooks con Husky (Ya configurado ✅)
 
-Para ayudarte a escribir commits correctos:
+Este proyecto **ya tiene Husky configurado** para validar commits automáticamente.
+
+**Qué hace:**
+- ✅ Valida el formato de commits antes de aceptarlos
+- ✅ Rechaza commits que no sigan Conventional Commits
+- ✅ Proporciona mensajes de error claros
+
+**Instalación automática:**
+```bash
+# Los hooks se instalan automáticamente al hacer:
+bun install
+
+# Si necesitas reinstalarlos manualmente:
+bunx husky install
+```
+
+**Ejemplo de validación:**
+```bash
+# ✅ Esto funcionará:
+git commit -m "feat: add user authentication"
+
+# ❌ Esto será rechazado:
+git commit -m "added new feature"
+# Error: subject may not be empty [subject-empty]
+# Error: type may not be empty [type-empty]
+
+# ❌ Esto también será rechazado:
+git commit -m "Added: new feature"
+# Error: type must be lower-case [type-case]
+```
+
+### Commitizen (Opcional)
+
+Si prefieres ayuda interactiva para escribir commits:
 
 ```bash
 # Instalar globalmente
@@ -208,19 +241,6 @@ npm install -g commitizen cz-conventional-changelog
 
 # Usar en lugar de git commit
 git cz
-```
-
-### Git Hooks con Husky
-
-Para validar commits automáticamente:
-
-```bash
-# Instalar
-npm install --save-dev husky @commitlint/cli @commitlint/config-conventional
-
-# Configurar
-npx husky install
-npx husky add .husky/commit-msg 'npx --no -- commitlint --edit $1'
 ```
 
 ## Configuración del Proyecto
@@ -241,9 +261,40 @@ Archivos de configuración:
 
 ## Preguntas Frecuentes
 
+### ¿Qué pasa si Husky rechaza mi commit?
+
+Husky validará tu commit antes de aceptarlo. Si el formato es incorrecto, verás un error:
+
+```bash
+$ git commit -m "added feature"
+⧗   input: added feature
+✖   subject may not be empty [subject-empty]
+✖   type may not be empty [type-empty]
+
+✖   found 2 problems, 0 warnings
+ⓘ   Get help: https://github.com/conventional-changelog/commitlint/#what-is-commitlint
+
+husky - commit-msg hook exited with code 1 (error)
+```
+
+**Solución:** Corrige el formato y vuelve a intentar:
+```bash
+git commit -m "feat: add new feature"
+```
+
+### ¿Puedo saltarme la validación de Husky?
+
+**No se recomienda**, pero si absolutamente necesitas hacerlo:
+
+```bash
+git commit -m "mensaje" --no-verify
+```
+
+⚠️ **Advertencia:** Esto puede romper el sistema de releases automáticos.
+
 ### ¿Qué pasa si olvido usar conventional commits?
 
-El commit no generará un release automático. Puedes crear un release manual o hacer un nuevo commit siguiendo el formato.
+El commit no generará un release automático. Husky te ayudará a evitar esto rechazando commits con formato incorrecto.
 
 ### ¿Puedo hacer múltiples features en un solo commit?
 

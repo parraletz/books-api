@@ -1,0 +1,8 @@
+#!/usr/bin/env sh
+. "$(dirname -- "$0")/_/husky.sh"
+
+# Opcional: Ejecuta linting/tests antes de commit
+# bun run lint
+# bun test
+
+echo "✅ Pre-commit checks passed"

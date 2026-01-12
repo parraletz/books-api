@@ -4,6 +4,7 @@
   "description": "Books API built with Hono and Bun",
   "scripts": {
     "dev": "bun run --hot src/index.ts",
+    "prepare": "husky install",
     "docker:dev": "docker-compose up",
     "docker:dev:build": "docker-compose up --build",
     "docker:down": "docker-compose down",
@@ -16,6 +17,12 @@
     "hono": "^4.11.3"
   },
   "devDependencies": {
-    "@types/bun": "latest"
+    "@types/bun": "latest",
+    "@commitlint/cli": "^18.4.4",
+    "@commitlint/config-conventional": "^18.4.4",
+    "husky": "^8.0.3"
+  },
+  "scripts-comments": {
+    "prepare": "Instala los hooks de Git automáticamente después de npm/bun install"
   }
 }

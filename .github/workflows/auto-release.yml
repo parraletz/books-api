@@ -10,6 +10,7 @@ permissions:
   packages: write
   id-token: write
   attestations: write
+  pull-requests: write
 
 jobs:
   release:
@@ -26,7 +27,6 @@ jobs:
         uses: googleapis/release-please-action@v4
         with:
           release-type: node
-          package-name: books-api
 
   build-and-push:
     name: Build and Push Release Image
