@@ -67,16 +67,22 @@ app.get("/", (c) => {
     version: "1.2.2",
     endpoints: {
       books: "/books",
-      health: "/health"
-    }
+      health: "/health",
+    },
   })
 })
 
 app.get("/health", (c) => {
   return c.json({
     status: "healthy",
-    timestamp: new Date().toISOString()
+    timestamp: new Date().toISOString(),
   })
+})
+
+app.post("/books/new", (c) => {
+  const body = c.body
+  c.status(201)
+  return c.json({ body })
 })
 
 app.get("/books", (c) => {
