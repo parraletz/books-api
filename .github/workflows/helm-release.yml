@@ -1,0 +1,84 @@
+name: Release Helm Chart
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'helm/**'
+      - '.github/workflows/helm-release.yml'
+  workflow_dispatch:
+
+env:
+  REGISTRY: ghcr.io
+  CHART_NAME: books-api
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Configure Git
+        run: |
+          git config user.name "$GITHUB_ACTOR"
+          git config user.email "$GITHUB_ACTOR@users.noreply.github.com"
+
+      - name: Install Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: 'latest'
+
+      - name: Log in to GitHub Container Registry
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" | helm registry login ${{ env.REGISTRY }} --username ${{ github.actor }} --password-stdin
+
+      - name: Package Helm Chart
+        run: |
+          helm package helm/${{ env.CHART_NAME }} -d .helm-charts
+
+      - name: Push Helm Chart to OCI Registry
+        run: |
+          CHART_VERSION=$(helm show chart helm/${{ env.CHART_NAME }} | grep '^version:' | awk '{print $2}')
+          helm push .helm-charts/${{ env.CHART_NAME }}-${CHART_VERSION}.tgz oci://${{ env.REGISTRY }}/${{ github.repository_owner }}/charts
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          CHART_VERSION=$(helm show chart helm/${{ env.CHART_NAME }} | grep '^version:' | awk '{print $2}')
+
+          # Check if release already exists
+          if gh release view "helm-v${CHART_VERSION}" >/dev/null 2>&1; then
+            echo "Release helm-v${CHART_VERSION} already exists, skipping..."
+            exit 0
+          fi
+
+          # Create release
+          gh release create "helm-v${CHART_VERSION}" \
+            .helm-charts/${{ env.CHART_NAME }}-${CHART_VERSION}.tgz \
+            --title "Helm Chart v${CHART_VERSION}" \
+            --notes "## Helm Chart Release v${CHART_VERSION}
+
+          ### Installation
+
+          \`\`\`bash
+          # Add the Helm repository (OCI)
+          helm pull oci://${{ env.REGISTRY }}/${{ github.repository_owner }}/charts/${{ env.CHART_NAME }} --version ${CHART_VERSION}
+
+          # Install the chart
+          helm install my-books-api oci://${{ env.REGISTRY }}/${{ github.repository_owner }}/charts/${{ env.CHART_NAME }} --version ${CHART_VERSION}
+          \`\`\`
+
+          ### What's Changed
+          - Helm chart version: ${CHART_VERSION}
+          - App version: $(helm show chart helm/${{ env.CHART_NAME }} | grep '^appVersion:' | awk '{print $2}')
+
+          Full installation instructions at: https://github.com/${{ github.repository }}"

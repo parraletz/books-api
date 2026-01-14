@@ -1,0 +1,17 @@
+apiVersion: v2
+name: books-api
+description: A Helm chart for Books API - Built with Hono and Bun
+type: application
+version: 1.0.0
+appVersion: "1.0.0"
+keywords:
+  - books
+  - api
+  - hono
+  - bun
+home: https://github.com/parraletz/books-api
+sources:
+  - https://github.com/parraletz/books-api
+maintainers:
+  - name: parraletz
+    url: https://github.com/parraletz

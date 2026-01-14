@@ -1,0 +1,52 @@
+# Example values.yaml for GitOps repository - Production
+# This file should be placed in: gitops-cf/books/api/values.yaml
+
+image:
+  repository: ghcr.io/parraletz/books-api
+  pullPolicy: IfNotPresent
+  tag: "1.0.0"  # This will be automatically updated by GitHub Actions
+
+replicaCount: 3
+
+service:
+  type: ClusterIP
+  port: 80
+  targetPort: 3000
+
+ingress:
+  enabled: true
+  className: "nginx"
+  annotations:
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+  hosts:
+    - host: books-api.example.com
+      paths:
+        - path: /
+          pathType: Prefix
+  tls:
+    - secretName: books-api-tls
+      hosts:
+        - books-api.example.com
+
+resources:
+  limits:
+    cpu: 500m
+    memory: 512Mi
+  requests:
+    cpu: 250m
+    memory: 256Mi
+
+autoscaling:
+  enabled: true
+  minReplicas: 3
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 70
+  targetMemoryUtilizationPercentage: 80
+
+env:
+  - name: NODE_ENV
+    value: "production"
+  - name: PORT
+    value: "3000"
