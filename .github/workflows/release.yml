@@ -3,6 +3,12 @@ name: Release
 on:
   release:
     types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag (e.g., v1.2.0)'
+        required: true
+        type: string
 
 permissions:
   contents: write
@@ -14,8 +20,19 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      - name: Determine tag
+        id: tag
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "TAG=${{ inputs.tag }}" >> $GITHUB_OUTPUT
+          else
+            echo "TAG=${{ github.event.release.tag_name }}" >> $GITHUB_OUTPUT
+          fi
+
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.tag.outputs.TAG }}
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -27,13 +44,14 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Extract version from release
+      - name: Extract version from tag
         id: version
         run: |
-          # Extract version from release tag (removes 'v' prefix)
-          VERSION="${{ github.event.release.tag_name }}"
-          VERSION="${VERSION#v}"
+          # Extract version from tag (removes 'v' prefix)
+          TAG="${{ steps.tag.outputs.TAG }}"
+          VERSION="${TAG#v}"
           echo "VERSION=${VERSION}" >> $GITHUB_OUTPUT
+          echo "Building version: ${VERSION}"
 
       - name: Build and push
         uses: docker/build-push-action@v5
@@ -62,13 +80,23 @@ jobs:
     needs: build-and-push-release
 
     steps:
-      - name: Extract version from release
+      - name: Determine tag
+        id: tag
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "TAG=${{ inputs.tag }}" >> $GITHUB_OUTPUT
+          else
+            echo "TAG=${{ github.event.release.tag_name }}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Extract version from tag
         id: version
         run: |
-          # Extract version from release tag (removes 'v' prefix)
-          VERSION="${{ github.event.release.tag_name }}"
-          VERSION="${VERSION#v}"
+          # Extract version from tag (removes 'v' prefix)
+          TAG="${{ steps.tag.outputs.TAG }}"
+          VERSION="${TAG#v}"
           echo "VERSION=${VERSION}" >> $GITHUB_OUTPUT
+          echo "Updating GitOps to version: ${VERSION}"
 
       - name: Checkout GitOps repository
         uses: actions/checkout@v4
