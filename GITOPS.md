@@ -126,7 +126,7 @@ gitops-cf/
 └── ...
 ```
 
-**Ejemplo de `books/api/values.yaml`:**
+**Ejemplo de `books/api/values-staging.yaml`:**
 
 ```yaml
 image:
