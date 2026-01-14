@@ -17,12 +17,14 @@ Este directorio contiene los workflows de CI/CD para la Books API.
   - Crea GitHub Release con notas automáticas
   - Publica imágenes Docker con tags de versión
   - Genera attestation de provenance
+  - **📦 Actualiza y publica Helm chart a OCI** (versión sincronizada con la app)
   - **🚀 Actualiza automáticamente GitOps** (`gitops-cf/books/api/values-staging.yaml`)
 
 **Jobs:**
 1. `release` - Release Please gestiona versionado
 2. `build-and-push` - Build y push de imagen Docker (solo si hay release)
-3. `update-gitops` - Actualiza repositorio GitOps con nuevo tag
+3. `update-helm-chart` - Actualiza versión del Helm chart y lo publica a OCI
+4. `update-gitops` - Actualiza repositorio GitOps con nuevo tag
 
 **⚠️ Requiere Secret:**
 - `GITOPS_PAT`: Personal Access Token con permisos de escritura en `gitops-cf`

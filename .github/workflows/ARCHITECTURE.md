@@ -43,7 +43,8 @@ graph TD
 **Jobs:**
 1. `release` - Release Please crea/actualiza PR de release
 2. `build-and-push` - Build y push de imagen (solo si hay release)
-3. `update-gitops` - Actualiza values-staging.yaml en gitops-cf
+3. `update-helm-chart` - Actualiza y publica Helm chart con versión sincronizada
+4. `update-gitops` - Actualiza values-staging.yaml en gitops-cf
 
 **Por qué es el principal:**
 - Todo sucede en un solo workflow
@@ -178,10 +179,16 @@ jobs:
     # Solo se ejecuta si hay release
     # Build + Push + Attestation
 
-  update-gitops:
+  update-helm-chart:
     needs: [release, build-and-push]
     if: release_created == 'true'
-    # Solo se ejecuta después del build exitoso
+    # Actualiza Chart.yaml con nueva versión
+    # Package y push del Helm chart a OCI
+
+  update-gitops:
+    needs: [release, build-and-push, update-helm-chart]
+    if: release_created == 'true'
+    # Solo se ejecuta después del build y chart exitosos
     # Actualiza gitops-cf con nueva versión
 ```
 
@@ -238,6 +245,9 @@ Cuando se hace un release, Auto Release ejecuta:
   - `ghcr.io/parraletz/books-api:1.2.0`
   - `ghcr.io/parraletz/books-api:latest`
 - [x] Genera attestation de provenance
+- [x] Actualiza versión del Helm chart (Chart.yaml)
+- [x] Package y push Helm chart a OCI:
+  - `oci://ghcr.io/parraletz/charts/books-api:1.2.0`
 - [x] Actualiza `gitops-cf/books/api/values-staging.yaml`
 - [x] Commit y push a GitOps repo
 - [ ] ArgoCD/Flux detecta cambio (automático)

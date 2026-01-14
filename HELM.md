@@ -33,16 +33,22 @@ helm/books-api/
 
 ## Publicación en GitHub Container Registry (OCI)
 
-### Workflow Automático
+### Workflow Automático - Sincronización de Versiones
 
-El chart se publica automáticamente a GHCR cuando:
-1. Se hace push a `main` con cambios en `helm/**`
-2. Se ejecuta manualmente el workflow
+El chart se publica automáticamente a GHCR como parte del workflow de release de la aplicación:
 
-El workflow (`.github/workflows/helm-release.yml`) realiza:
-1. Empaqueta el chart con `helm package`
-2. Lo publica a `ghcr.io/parraletz/charts/books-api` usando `helm push`
-3. Crea un GitHub Release con el archivo `.tgz`
+**Cuando se hace un release de la aplicación** (via Release Please):
+1. El workflow `auto-release.yml` actualiza automáticamente `Chart.yaml` con la nueva versión
+2. La versión del chart se sincroniza con la versión de la aplicación (ej: app v2.0.0 → chart v2.0.0)
+3. Empaqueta el chart con la nueva versión
+4. Lo publica a `oci://ghcr.io/parraletz/charts/books-api:VERSION`
+
+**✅ Ventaja principal**: La versión del chart siempre coincide con la versión de la imagen de la aplicación, facilitando el seguimiento y despliegue.
+
+**Workflow legacy** (`.github/workflows/helm-release.yml`):
+- Se mantiene para publicación manual del chart independientemente
+- Se activa con cambios en `helm/**` o manualmente
+- Útil si necesitas publicar una nueva versión del chart sin hacer release de la app
 
 ### Publicación Manual
 

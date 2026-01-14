@@ -25,14 +25,22 @@ Este documento describe el flujo de GitOps implementado para Books API.
 │              GitHub Actions: Auto Release Workflow              │
 │                                                                 │
 │  ┌──────────────┐   ┌──────────────┐   ┌──────────────┐       │
-│  │   Release    │   │  Build &     │   │   Update     │       │
-│  │   Please     │──▶│  Push Image  │──▶│   GitOps     │       │
-│  │   (v2.0.0)   │   │  (1 build)   │   │   Repo       │       │
-│  └──────────────┘   └──────────────┘   └──────────────┘       │
+│  │   Release    │   │  Build &     │   │  Publish     │       │
+│  │   Please     │──▶│  Push Image  │──▶│  Helm Chart  │       │
+│  │   (v2.0.0)   │   │  (1 build)   │   │  (OCI)       │       │
+│  └──────────────┘   └──────────────┘   └──────┬───────┘       │
+│                                                │               │
+│                                                ▼               │
+│                                         ┌──────────────┐       │
+│                                         │   Update     │       │
+│                                         │   GitOps     │       │
+│                                         │   Repo       │       │
+│                                         └──────────────┘       │
 │                                                                 │
 │  Outputs:                                                       │
 │  - GitHub Release (v2.0.0)                                     │
 │  - Docker Image (ghcr.io/parraletz/books-api:2.0.0)           │
+│  - Helm Chart (oci://ghcr.io/.../charts/books-api:2.0.0)      │
 │  - GitOps Commit (tag: 2.0.0)                                 │
 └─────────────────────────────────────────────────────────────────┘
                               │
@@ -110,7 +118,11 @@ El workflow [.github/workflows/auto-release.yml](.github/workflows/auto-release.
    - La publica a `ghcr.io/parraletz/books-api:VERSION`
    - También publica con tag `:latest`
    - Genera attestation de provenance
-3. **update-gitops**:
+3. **update-helm-chart**:
+   - Actualiza `helm/books-api/Chart.yaml` con la nueva versión
+   - Package del chart con la versión sincronizada con la app
+   - Publica el chart a `oci://ghcr.io/parraletz/charts/books-api:VERSION`
+4. **update-gitops**:
    - Hace checkout del repo `parraletz/gitops-cf`
    - Actualiza `books/api/values-staging.yaml` con el nuevo tag
    - Hace commit y push de los cambios automáticamente
@@ -354,9 +366,17 @@ spec:
   revisionHistoryLimit: 10
 ```
 
-### Application usando OCI Helm Chart
+### Application usando OCI Helm Chart con Values desde Git (Enfoque Híbrido)
 
-Si prefieres usar el Helm chart publicado en GHCR como OCI artifact:
+**Patrón recomendado**: Usar el chart desde OCI registry **pero** los values desde GitOps repo.
+
+Esto combina lo mejor de ambos mundos:
+- Chart versionado como artifact (OCI)
+- Values versionados en Git (GitOps puro)
+
+⚠️ **IMPORTANTE**: ArgoCD actualmente **NO soporta** múltiples sources (chart OCI + values desde Git) en una sola Application. Tienes dos opciones:
+
+#### Opción A: Chart OCI con valores inline (actualización manual del manifest)
 
 ```yaml
 apiVersion: argoproj.io/v1alpha1
@@ -375,16 +395,19 @@ spec:
   source:
     # Usar esquema oci:// para Helm charts en OCI registries
     repoURL: oci://ghcr.io/parraletz/charts/books-api
-    targetRevision: 1.0.0  # Versión del chart
+    # ✅ La versión del chart está sincronizada con la versión de la app
+    targetRevision: 2.0.0  # Versión del chart = versión de la app
     # IMPORTANTE: path debe ser "." para OCI Helm charts
     path: .
 
     helm:
-      # Valores personalizados
+      # Valores personalizados inline
+      # ⚠️ NOTA: Estos valores deben actualizarse manualmente en este manifest
+      # El workflow de GitOps NO puede actualizar este archivo automáticamente
       valuesObject:
         image:
           repository: ghcr.io/parraletz/books-api
-          tag: "2.0.0"
+          tag: "2.0.0"  # ⚠️ Requiere actualización manual
           pullPolicy: IfNotPresent
 
         replicaCount: 3
@@ -422,6 +445,106 @@ spec:
       - CreateNamespace=true
       - ServerSideApply=true
 ```
+
+**Ventaja**: ✅ El chart OCI está versionado y sincronizado automáticamente con la versión de la app.
+
+**Desventaja**: ❌ El workflow de auto-release actualiza `gitops-cf/books/api/values-staging.yaml`, pero este manifest usa `valuesObject` inline, por lo que **NO se actualizará automáticamente**. Deberías actualizar manualmente tanto `targetRevision` (versión del chart) como `image.tag` (versión de la imagen).
+
+#### Opción B: Usar ApplicationSet con múltiples sources (ArgoCD v2.6+)
+
+Si usas ArgoCD v2.6 o superior, puedes usar la feature de **múltiples sources**:
+
+```yaml
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: books-api-staging-oci-multi
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+  labels:
+    environment: staging
+    app: books-api
+spec:
+  project: default
+
+  # ✅ MÚLTIPLES SOURCES (ArgoCD v2.6+)
+  sources:
+    # Source 1: Chart OCI
+    - repoURL: oci://ghcr.io/parraletz/charts/books-api
+      # ✅ Versión del chart sincronizada con la app
+      targetRevision: 2.0.0  # Auto-actualizada por workflow
+      chart: books-api
+      helm:
+        valueFiles:
+          # Referencia al archivo del segundo source usando $values
+          - $values/books/api/values-staging.yaml
+
+    # Source 2: Repositorio GitOps con values
+    - repoURL: https://github.com/parraletz/gitops-cf
+      targetRevision: main
+      ref: values  # Nombre de referencia para usar en valueFiles
+
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: books-api-staging
+
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true
+```
+
+**Ventajas**:
+- ✅ Chart versionado como OCI artifact (sincronizado con versión de la app)
+- ✅ Values versionados en Git
+- ✅ El workflow actualiza tanto el chart OCI como `values-staging.yaml`
+- ✅ ArgoCD sync automático cuando detecta nuevas versiones
+- ✅ GitOps puro para configuración
+
+**Requisito**: ArgoCD v2.6 o superior
+
+**Nota importante**: Con este enfoque, el workflow publica un nuevo chart OCI con cada release, pero aún necesitas actualizar manualmente el `targetRevision` en el Application manifest de ArgoCD para que use la nueva versión del chart. Los values en Git se actualizan automáticamente.
+
+#### Opción C: Chart desde Git (RECOMENDADO para este proyecto)
+
+La forma más simple y compatible con el workflow actual:
+
+```yaml
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: books-api-staging
+  namespace: argocd
+spec:
+  project: default
+
+  source:
+    repoURL: https://github.com/parraletz/gitops-cf
+    targetRevision: main
+    path: books/api
+    helm:
+      valueFiles:
+        - values-staging.yaml  # ✅ Se actualiza automáticamente por el workflow
+
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: books-api-staging
+
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+```
+
+**Ventajas**:
+- ✅ Compatible con todas las versiones de ArgoCD
+- ✅ Funciona con el workflow actual (actualiza values-staging.yaml)
+- ✅ GitOps puro
+- ✅ No requiere configuración adicional
 
 #### Autenticación para OCI Registry Privado
 
