@@ -356,7 +356,7 @@ spec:
 
 ### Application usando OCI Helm Chart
 
-Si prefieres usar el Helm chart publicado en GHCR:
+Si prefieres usar el Helm chart publicado en GHCR como OCI artifact:
 
 ```yaml
 apiVersion: argoproj.io/v1alpha1
@@ -364,23 +364,38 @@ kind: Application
 metadata:
   name: books-api-staging-oci
   namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+  labels:
+    environment: staging
+    app: books-api
 spec:
   project: default
 
   source:
-    # Usar Helm chart de OCI registry
-    chart: books-api
-    repoURL: ghcr.io/parraletz/charts
+    # Usar esquema oci:// para Helm charts en OCI registries
+    repoURL: oci://ghcr.io/parraletz/charts/books-api
     targetRevision: 1.0.0  # Versión del chart
+    # IMPORTANTE: path debe ser "." para OCI Helm charts
+    path: .
 
     helm:
       # Valores personalizados
-      values: |
+      valuesObject:
         image:
           repository: ghcr.io/parraletz/books-api
           tag: "2.0.0"
+          pullPolicy: IfNotPresent
 
         replicaCount: 3
+
+        resources:
+          limits:
+            cpu: 200m
+            memory: 256Mi
+          requests:
+            cpu: 100m
+            memory: 128Mi
 
         ingress:
           enabled: true
@@ -390,6 +405,10 @@ spec:
               paths:
                 - path: /
                   pathType: Prefix
+          tls:
+            - secretName: books-api-tls
+              hosts:
+                - books-api-staging.example.com
 
   destination:
     server: https://kubernetes.default.svc
@@ -401,6 +420,54 @@ spec:
       selfHeal: true
     syncOptions:
       - CreateNamespace=true
+      - ServerSideApply=true
+```
+
+#### Autenticación para OCI Registry Privado
+
+Si tu GHCR es privado, necesitas configurar credenciales en ArgoCD:
+
+**Opción 1: Via ArgoCD CLI**
+
+```bash
+# Para repositorio OCI
+argocd repo add oci://ghcr.io/parraletz/charts/books-api \
+  --type oci \
+  --name books-api-chart \
+  --username <github-username> \
+  --password <github-token>
+
+# O con --enable-oci para repositorios Helm
+argocd repo add ghcr.io/parraletz/charts \
+  --type helm \
+  --name parraletz-charts \
+  --username <github-username> \
+  --password <github-token> \
+  --enable-oci
+```
+
+**Opción 2: Via Secret de Kubernetes**
+
+```yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: ghcr-oci-creds
+  namespace: argocd
+  labels:
+    argocd.argoproj.io/secret-type: repository
+stringData:
+  name: books-api-chart
+  url: oci://ghcr.io/parraletz/charts/books-api
+  type: oci
+  username: <github-username>
+  password: <github-token>
+```
+
+Aplicar el secret:
+
+```bash
+kubectl apply -f ghcr-oci-creds.yaml
 ```
 
 ### Aplicar con ArgoCD CLI
@@ -417,11 +484,13 @@ kubectl get application -n argocd
 
 #### Opción 2: Usar ArgoCD CLI
 
+**Para chart desde Git (recomendado para GitOps):**
+
 ```bash
 # Login a ArgoCD
 argocd login argocd.example.com --username admin
 
-# Crear aplicación para staging
+# Crear aplicación para staging usando chart desde Git
 argocd app create books-api-staging \
   --repo https://github.com/parraletz/gitops-cf \
   --path books/api \
@@ -449,6 +518,31 @@ argocd app history books-api-staging
 
 # Ver diferencias pendientes
 argocd app diff books-api-staging
+```
+
+**Para chart desde OCI registry:**
+
+```bash
+# Primero, agregar credenciales del OCI registry (si es privado)
+argocd repo add oci://ghcr.io/parraletz/charts/books-api \
+  --type oci \
+  --name books-api-chart \
+  --username <github-username> \
+  --password <github-token>
+
+# Crear aplicación usando chart OCI
+argocd app create books-api-staging-oci \
+  --repo oci://ghcr.io/parraletz/charts/books-api \
+  --revision 1.0.0 \
+  --path . \
+  --dest-server https://kubernetes.default.svc \
+  --dest-namespace books-api-staging \
+  --helm-set image.tag=2.0.0 \
+  --helm-set replicaCount=3 \
+  --sync-policy automated \
+  --auto-prune \
+  --self-heal \
+  --sync-option CreateNamespace=true
 ```
 
 #### Opción 3: Usar ArgoCD Web UI
@@ -499,6 +593,30 @@ argocd app refresh books-api-staging
 # Hard refresh (forzar)
 argocd app refresh books-api-staging --hard
 ```
+
+### Comparación: Git vs OCI para Helm Charts
+
+| Aspecto | Chart desde Git | Chart desde OCI |
+|---------|-----------------|-----------------|
+| **URL** | `https://github.com/...` | `oci://ghcr.io/...` |
+| **Path** | `books/api` | `.` (siempre) |
+| **Versionado** | Git commits/branches | Chart versions |
+| **Values** | `valueFiles: [values-staging.yaml]` | `valuesObject:` inline |
+| **GitOps puro** | ✅ Sí | ❌ No (chart externo) |
+| **Actualización** | Git commit → sync | Chart publish → manual update |
+| **Rollback** | `git revert` | Change `targetRevision` |
+| **Best for** | GitOps workflow | Chart reusability |
+
+**Recomendación**: Para este proyecto, usa **chart desde Git** porque:
+- ✅ El workflow actualiza automáticamente `values-staging.yaml` en Git
+- ✅ GitOps puro: todo versionado en Git
+- ✅ Rollback más sencillo con `git revert`
+- ✅ Cambios de configuración y chart juntos
+
+Usa **OCI** solo si:
+- Necesitas compartir el mismo chart entre múltiples equipos/proyectos
+- Quieres versionar el chart independientemente de la configuración
+- Tienes CI/CD que requiere artifacts versionados
 
 ### Estructura Recomendada en GitOps Repo
 
