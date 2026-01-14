@@ -105,25 +105,26 @@ jobs:
           token: ${{ secrets.GITOPS_PAT }}
           ref: main
 
-      - name: Update image tag in values.yaml
+      - name: Update image tag in values-staging.yaml
         run: |
           cd books/api
 
           # Update the image tag using yq or sed
           if command -v yq &> /dev/null; then
-            yq eval '.image.tag = "${{ steps.version.outputs.VERSION }}"' -i values.yaml
+            yq eval '.image.tag = "${{ steps.version.outputs.VERSION }}"' -i values-staging.yaml
           else
             # Fallback to sed if yq is not available
-            sed -i "s/tag: .*/tag: \"${{ steps.version.outputs.VERSION }}\"/" values.yaml
+            sed -i "s/tag: .*/tag: \"${{ steps.version.outputs.VERSION }}\"/" values-staging.yaml
           fi
 
-          cat values.yaml
+          echo "Updated values-staging.yaml:"
+          cat values-staging.yaml
 
       - name: Commit and push changes
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
-          git add books/api/values.yaml
+          git add books/api/values-staging.yaml
           git commit -m "chore(books-api): update image tag to ${{ steps.version.outputs.VERSION }}"
           git push origin main
