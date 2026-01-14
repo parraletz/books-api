@@ -62,7 +62,21 @@ const books: Array<{
 ]
 
 app.get("/", (c) => {
-  return c.text("Hello Hono!")
+  return c.json({
+    message: "Books API",
+    version: "1.2.2",
+    endpoints: {
+      books: "/books",
+      health: "/health"
+    }
+  })
+})
+
+app.get("/health", (c) => {
+  return c.json({
+    status: "healthy",
+    timestamp: new Date().toISOString()
+  })
 })
 
 app.get("/books", (c) => {
