@@ -4,7 +4,7 @@ Este directorio contiene los workflows de CI/CD para la Books API.
 
 ## Workflows disponibles
 
-### 1. Auto Release ([auto-release.yml](auto-release.yml)) ⭐ NUEVO
+### 1. Auto Release ([auto-release.yml](auto-release.yml)) ⭐ PRINCIPAL
 
 **Se ejecuta en:**
 - Push a `main`
@@ -17,8 +17,17 @@ Este directorio contiene los workflows de CI/CD para la Books API.
   - Crea GitHub Release con notas automáticas
   - Publica imágenes Docker con tags de versión
   - Genera attestation de provenance
+  - **🚀 Actualiza automáticamente GitOps** (`gitops-cf/books/api/values-staging.yaml`)
 
-**Importante:** Este es el método **recomendado** para crear releases. Lee [CONTRIBUTING.md](../../CONTRIBUTING.md) para aprender sobre Conventional Commits.
+**Jobs:**
+1. `release` - Release Please gestiona versionado
+2. `build-and-push` - Build y push de imagen Docker (solo si hay release)
+3. `update-gitops` - Actualiza repositorio GitOps con nuevo tag
+
+**⚠️ Requiere Secret:**
+- `GITOPS_PAT`: Personal Access Token con permisos de escritura en `gitops-cf`
+
+**Importante:** Este es el método **recomendado** y **automático** para crear releases. Lee [CONTRIBUTING.md](../../CONTRIBUTING.md) para aprender sobre Conventional Commits.
 
 ### 2. CI - Test and Build ([ci.yml](ci.yml))
 
@@ -51,23 +60,26 @@ Este directorio contiene los workflows de CI/CD para la Books API.
 - Crea attestation de provenance
 - Soporta múltiples plataformas (amd64, arm64)
 
-### 4. Release ([release.yml](release.yml))
+### 4. Release (Manual Testing) ([release.yml](release.yml))
+
+**⚠️ DEPRECATED**: Este workflow está deprecado. La actualización de GitOps ahora ocurre automáticamente en `auto-release.yml`.
 
 **Se ejecuta en:**
-- Cuando se **publica** un release en GitHub (`release: published`)
-- Típicamente activado por Release Please al mergear el PR de release
+- Solo manual (`workflow_dispatch`)
 
 **Funciones:**
-- Construye y publica imagen Docker con tags de versión
-- Etiqueta la imagen como `latest`
-- **🚀 GitOps**: Actualiza automáticamente el tag en `parraletz/gitops-cf/books/api/values.yaml`
+- Testing manual de builds
+- Re-build de versiones específicas
+- Actualización de GitOps sin crear release (con `skip_build: true`)
 
-**Jobs:**
-1. `build-and-push-release`: Build de imagen Docker versionada
-2. `update-gitops`: Actualiza el repositorio GitOps con el nuevo tag
+**Opciones:**
+- `tag`: Tag a procesar (ej: v1.2.0)
+- `skip_build`: Saltar Docker build, solo actualizar GitOps (default: false)
 
-**⚠️ Requiere Secret:**
-- `GITOPS_PAT`: Personal Access Token con permisos de escritura en `gitops-cf`
+**Por qué está deprecado:**
+- Auto Release ya maneja todo el flujo automáticamente
+- Evita duplicación de builds (antes se hacía build 2 veces por release)
+- Solo se mantiene para casos de testing/debugging manual
 
 ## Configuración inicial
 
