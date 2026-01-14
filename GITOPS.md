@@ -7,39 +7,69 @@ Este documento describe el flujo de GitOps implementado para Books API.
 ```
 ┌─────────────────────────────────────────────────────────────────┐
 │                      Developer Workflow                         │
+│  1. git commit -m "feat: nueva funcionalidad"                  │
+│  2. git push origin main                                        │
 └─────────────────────────────────────────────────────────────────┘
                               │
-                              │ 1. git push
                               ▼
 ┌─────────────────────────────────────────────────────────────────┐
 │                    parraletz/books-api                          │
 │                    (Application Repo)                           │
+│                                                                 │
+│  Release Please → Crea PR automático → Merge PR                │
 └─────────────────────────────────────────────────────────────────┘
                               │
-                              │ 2. Tag v*.*.* triggers release
+                              │ Trigger: Auto Release Workflow
                               ▼
 ┌─────────────────────────────────────────────────────────────────┐
-│                    GitHub Actions Workflow                       │
+│              GitHub Actions: Auto Release Workflow              │
+│                                                                 │
 │  ┌──────────────┐   ┌──────────────┐   ┌──────────────┐       │
-│  │   Create     │   │  Build &     │   │   Update     │       │
-│  │   Release    │──▶│  Push Image  │──▶│   GitOps     │       │
+│  │   Release    │   │  Build &     │   │   Update     │       │
+│  │   Please     │──▶│  Push Image  │──▶│   GitOps     │       │
+│  │   (v2.0.0)   │   │  (1 build)   │   │   Repo       │       │
 │  └──────────────┘   └──────────────┘   └──────────────┘       │
+│                                                                 │
+│  Outputs:                                                       │
+│  - GitHub Release (v2.0.0)                                     │
+│  - Docker Image (ghcr.io/parraletz/books-api:2.0.0)           │
+│  - GitOps Commit (tag: 2.0.0)                                 │
 └─────────────────────────────────────────────────────────────────┘
                               │
-                              │ 3. Updates values.yaml
+                              │ Commit to GitOps repo
                               ▼
 ┌─────────────────────────────────────────────────────────────────┐
 │                   parraletz/gitops-cf                           │
 │                   (GitOps Repo)                                 │
-│                   books/api/values.yaml                         │
+│                                                                 │
+│  books/api/values-staging.yaml:                                │
+│    image:                                                       │
+│      tag: "2.0.0"  ← Actualizado automáticamente              │
 └─────────────────────────────────────────────────────────────────┘
                               │
-                              │ 4. ArgoCD/Flux syncs
+                              │ ArgoCD detecta cambio (polling)
+                              ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                      ArgoCD / Flux                              │
+│                                                                 │
+│  1. Detecta cambio en Git                                      │
+│  2. Compara estado deseado vs actual                           │
+│  3. Sincroniza automáticamente                                 │
+└─────────────────────────────────────────────────────────────────┘
+                              │
+                              │ kubectl apply
                               ▼
 ┌─────────────────────────────────────────────────────────────────┐
 │                   Kubernetes Cluster                            │
-│                   (Staging/Production)                          │
+│                   (Staging Environment)                         │
+│                                                                 │
+│  Deployment: books-api                                         │
+│  Image: ghcr.io/parraletz/books-api:2.0.0                     │
+│  Replicas: 2                                                   │
+│  Status: Running ✓                                             │
 └─────────────────────────────────────────────────────────────────┘
+
+Tiempo total: ~2 minutos (desde commit hasta deploy)
 ```
 
 ## Flujo de Despliegue
@@ -72,17 +102,18 @@ git push origin v1.2.0
 
 ### 3. GitHub Actions se Ejecuta Automáticamente
 
-El workflow [.github/workflows/release.yml](.github/workflows/release.yml) realiza:
+El workflow [.github/workflows/auto-release.yml](.github/workflows/auto-release.yml) realiza:
 
-1. **create-release**: Crea un GitHub Release
-2. **build-and-push-release**:
-   - Construye la imagen Docker
+1. **release**: Release Please crea el GitHub Release
+2. **build-and-push**:
+   - Construye la imagen Docker (una sola vez)
    - La publica a `ghcr.io/parraletz/books-api:VERSION`
    - También publica con tag `:latest`
+   - Genera attestation de provenance
 3. **update-gitops**:
    - Hace checkout del repo `parraletz/gitops-cf`
-   - Actualiza `books/api/values.yaml` con el nuevo tag
-   - Hace commit y push de los cambios
+   - Actualiza `books/api/values-staging.yaml` con el nuevo tag
+   - Hace commit y push de los cambios automáticamente
 
 ### 4. ArgoCD/Flux Sincroniza
 
@@ -162,62 +193,343 @@ Estos archivos son referencias que puedes copiar a tu repositorio GitOps.
 
 ## Configuración de ArgoCD
 
-### Application Manifest
+### Application Manifest para Staging
+
+Este ejemplo usa el Helm chart directamente desde el repositorio GitOps:
 
 ```yaml
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
-  name: books-api
+  name: books-api-staging
   namespace: argocd
+  # Finalizers aseguran que ArgoCD limpia recursos cuando se elimina la app
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+  # Labels para organización
+  labels:
+    environment: staging
+    team: backend
+    app: books-api
 spec:
+  # Proyecto de ArgoCD (default o crear uno específico)
   project: default
 
+  # Fuente del código (GitOps repository)
   source:
     repoURL: https://github.com/parraletz/gitops-cf
     targetRevision: main
     path: books/api
+
+    # Configuración para Helm chart
     helm:
+      # Archivo de valores a usar
       valueFiles:
-        - values.yaml
+        - values-staging.yaml
 
+      # Parámetros adicionales (opcional)
+      parameters:
+        - name: image.pullPolicy
+          value: Always
+
+      # Valores inline (opcional, sobrescriben valueFiles)
+      # values: |
+      #   replicaCount: 3
+      #   ingress:
+      #     enabled: true
+
+  # Destino del deployment
   destination:
+    # URL del cluster (in-cluster)
     server: https://kubernetes.default.svc
-    namespace: books-api
+    # O usar nombre del cluster:
+    # name: in-cluster
 
+    # Namespace donde se desplegará
+    namespace: books-api-staging
+
+  # Política de sincronización
   syncPolicy:
+    # Sincronización automática
     automated:
+      # Eliminar recursos que ya no están en Git
       prune: true
+      # Auto-reparar si alguien modifica recursos manualmente
       selfHeal: true
+      # No permitir apps vacías
       allowEmpty: false
+
+    # Opciones de sincronización
     syncOptions:
+      # Crear namespace automáticamente si no existe
       - CreateNamespace=true
+      # Validar recursos antes de aplicar
+      - Validate=true
+      # Usar server-side apply (recomendado)
+      - ServerSideApply=true
+      # Respetar ignore differences
+      - RespectIgnoreDifferences=true
+
+    # Política de retry
     retry:
       limit: 5
       backoff:
         duration: 5s
         factor: 2
         maxDuration: 3m
+
+  # Ignorar diferencias en ciertos campos (evita sync loops)
+  ignoreDifferences:
+    - group: apps
+      kind: Deployment
+      jsonPointers:
+        - /spec/replicas  # Ignorar si HPA controla replicas
+    - group: "*"
+      kind: "*"
+      managedFieldsManagers:
+        - kube-controller-manager  # Ignorar cambios del controller
+
+  # Información adicional (opcional)
+  info:
+    - name: "URL"
+      value: "https://books-api-staging.example.com"
+    - name: "Repository"
+      value: "https://github.com/parraletz/books-api"
+```
+
+### Application Manifest para Production
+
+Para producción, puedes tener configuración más restrictiva:
+
+```yaml
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: books-api-production
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+  labels:
+    environment: production
+    team: backend
+    app: books-api
+  annotations:
+    # Notificaciones
+    notifications.argoproj.io/subscribe.on-sync-succeeded.slack: prod-deployments
+    notifications.argoproj.io/subscribe.on-health-degraded.slack: prod-alerts
+spec:
+  project: production  # Proyecto específico para producción
+
+  source:
+    repoURL: https://github.com/parraletz/gitops-cf
+    targetRevision: main  # O usar tag específico para producción
+    path: books/api
+    helm:
+      valueFiles:
+        - values-production.yaml
+
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: books-api-production
+
+  syncPolicy:
+    # Sincronización MANUAL para producción (más control)
+    # automated:
+    #   prune: false
+    #   selfHeal: false
+
+    syncOptions:
+      - CreateNamespace=true
+      - Validate=true
+      - ServerSideApply=true
+
+    retry:
+      limit: 3
+      backoff:
+        duration: 10s
+        factor: 2
+        maxDuration: 5m
+
+  # Revisar cambios antes de aplicar (production)
+  revisionHistoryLimit: 10
+```
+
+### Application usando OCI Helm Chart
+
+Si prefieres usar el Helm chart publicado en GHCR:
+
+```yaml
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: books-api-staging-oci
+  namespace: argocd
+spec:
+  project: default
+
+  source:
+    # Usar Helm chart de OCI registry
+    chart: books-api
+    repoURL: ghcr.io/parraletz/charts
+    targetRevision: 1.0.0  # Versión del chart
+
+    helm:
+      # Valores personalizados
+      values: |
+        image:
+          repository: ghcr.io/parraletz/books-api
+          tag: "2.0.0"
+
+        replicaCount: 3
+
+        ingress:
+          enabled: true
+          className: nginx
+          hosts:
+            - host: books-api-staging.example.com
+              paths:
+                - path: /
+                  pathType: Prefix
+
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: books-api-staging
+
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
 ```
 
 ### Aplicar con ArgoCD CLI
 
+#### Opción 1: Desde archivo YAML
+
 ```bash
-# Crear la aplicación
-argocd app create books-api \
+# Aplicar el manifest
+kubectl apply -f argocd/books-api-staging.yaml
+
+# Verificar
+kubectl get application -n argocd
+```
+
+#### Opción 2: Usar ArgoCD CLI
+
+```bash
+# Login a ArgoCD
+argocd login argocd.example.com --username admin
+
+# Crear aplicación para staging
+argocd app create books-api-staging \
   --repo https://github.com/parraletz/gitops-cf \
   --path books/api \
   --dest-server https://kubernetes.default.svc \
-  --dest-namespace books-api \
+  --dest-namespace books-api-staging \
+  --helm-set-file values-staging.yaml \
   --sync-policy automated \
   --auto-prune \
-  --self-heal
+  --self-heal \
+  --sync-option CreateNamespace=true \
+  --label environment=staging \
+  --label app=books-api
 
 # Ver status
-argocd app get books-api
+argocd app get books-api-staging
 
-# Sincronizar manualmente (si no está en auto)
-argocd app sync books-api
+# Ver logs de sync
+argocd app logs books-api-staging --follow
+
+# Sincronizar manualmente
+argocd app sync books-api-staging
+
+# Ver historial de deploys
+argocd app history books-api-staging
+
+# Ver diferencias pendientes
+argocd app diff books-api-staging
+```
+
+#### Opción 3: Usar ArgoCD Web UI
+
+1. Login a ArgoCD UI: `https://argocd.example.com`
+2. Click en "+ NEW APP"
+3. Completar el formulario:
+   - **Application Name**: books-api-staging
+   - **Project**: default
+   - **Sync Policy**: Automatic
+   - **Repository URL**: https://github.com/parraletz/gitops-cf
+   - **Path**: books/api
+   - **Cluster**: https://kubernetes.default.svc
+   - **Namespace**: books-api-staging
+   - **Helm Values**: values-staging.yaml
+4. Click en "CREATE"
+
+### Comandos Útiles de ArgoCD
+
+```bash
+# Listar todas las aplicaciones
+argocd app list
+
+# Ver recursos de una aplicación
+argocd app resources books-api-staging
+
+# Ver eventos
+argocd app events books-api-staging
+
+# Hacer rollback a versión anterior
+argocd app rollback books-api-staging <revision-id>
+
+# Pausar auto-sync temporalmente
+argocd app set books-api-staging --sync-policy none
+
+# Reactivar auto-sync
+argocd app set books-api-staging --sync-policy automated
+
+# Eliminar aplicación (solo en ArgoCD, no en cluster)
+argocd app delete books-api-staging --cascade=false
+
+# Eliminar aplicación y recursos en cluster
+argocd app delete books-api-staging --cascade=true
+
+# Refrescar manualmente (detectar cambios en Git)
+argocd app refresh books-api-staging
+
+# Hard refresh (forzar)
+argocd app refresh books-api-staging --hard
+```
+
+### Estructura Recomendada en GitOps Repo
+
+Para múltiples ambientes, organiza así:
+
+```
+gitops-cf/
+├── apps/
+│   └── argocd/
+│       ├── books-api-staging.yaml    # App manifest para staging
+│       └── books-api-production.yaml # App manifest para production
+├── books/
+│   └── api/
+│       ├── Chart.yaml                # Helm chart (opcional)
+│       ├── values-staging.yaml       # Valores para staging
+│       ├── values-production.yaml    # Valores para production
+│       └── templates/                # Templates de Helm
+│           ├── deployment.yaml
+│           ├── service.yaml
+│           └── ingress.yaml
+└── README.md
+```
+
+Luego aplica las apps con:
+
+```bash
+# Aplicar staging
+kubectl apply -f apps/argocd/books-api-staging.yaml
+
+# Aplicar production
+kubectl apply -f apps/argocd/books-api-production.yaml
 ```
 
 ## Configuración de Flux
