@@ -147,12 +147,27 @@ jobs:
           echo "Updated values-staging.yaml:"
           cat values-staging.yaml
 
+      - name: Update ArgoCD Application manifest
+        run: |
+          VERSION="${{ needs.release.outputs.version }}"
+          APP_FILE="apps/staging/books-api.yaml"
+
+          # Update targetRevision for the OCI chart
+          yq eval '(.spec.sources[] | select(.repoURL == "oci://ghcr.io/parraletz/charts/books-api") | .targetRevision) = "'"${VERSION}"'"' -i "$APP_FILE"
+
+          # Update image.tag in valuesObject
+          yq eval '(.spec.sources[] | select(.repoURL == "oci://ghcr.io/parraletz/charts/books-api") | .helm.valuesObject.image.tag) = "'"${VERSION}"'"' -i "$APP_FILE"
+
+          echo "Updated $APP_FILE:"
+          cat "$APP_FILE"
+
       - name: Commit and push changes
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
           git add books/api/values-staging.yaml
+          git add apps/staging/books-api.yaml
 
           if git diff --staged --quiet; then
             echo "No changes to commit"
