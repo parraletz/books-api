@@ -51,17 +51,23 @@ Este directorio contiene los workflows de CI/CD para la Books API.
 - Crea attestation de provenance
 - Soporta múltiples plataformas (amd64, arm64)
 
-### 4. Release (Manual) ([release.yml](release.yml))
-
-**⚠️ Deprecado:** Usa el workflow Auto Release en su lugar.
+### 4. Release ([release.yml](release.yml))
 
 **Se ejecuta en:**
-- Push de tags con formato `v*.*.*`
+- Cuando se **publica** un release en GitHub (`release: published`)
+- Típicamente activado por Release Please al mergear el PR de release
 
 **Funciones:**
-- Crea un release en GitHub con changelog automático
 - Construye y publica imagen Docker con tags de versión
 - Etiqueta la imagen como `latest`
+- **🚀 GitOps**: Actualiza automáticamente el tag en `parraletz/gitops-cf/books/api/values.yaml`
+
+**Jobs:**
+1. `build-and-push-release`: Build de imagen Docker versionada
+2. `update-gitops`: Actualiza el repositorio GitOps con el nuevo tag
+
+**⚠️ Requiere Secret:**
+- `GITOPS_PAT`: Personal Access Token con permisos de escritura en `gitops-cf`
 
 ## Configuración inicial
 
@@ -201,6 +207,21 @@ Los workflows usan las siguientes variables:
 - `REGISTRY`: `ghcr.io` (GitHub Container Registry)
 - `IMAGE_NAME`: `${{ github.repository }}` (ej: `owner/books-api`)
 
+### Configurar GITOPS_PAT (Requerido para GitOps)
+
+Para que el workflow de release actualice automáticamente el repo GitOps:
+
+```bash
+# 1. Crear PAT en GitHub:
+# https://github.com/settings/tokens?type=beta
+# - Repository access: Only "parraletz/gitops-cf"
+# - Permissions: Contents (Read and write)
+
+# 2. Agregar como secret:
+gh secret set GITOPS_PAT --repo parraletz/books-api
+# Pega el token cuando te lo pida
+```
+
 ## Caché de Docker
 
 Los workflows utilizan GitHub Actions Cache para:
@@ -218,12 +239,71 @@ Los workflows utilizan GitHub Actions Cache para:
 
 ## Troubleshooting
 
+### El workflow de release no se ejecuta
+
+**Problema:** Mergeaste el PR de Release Please pero no se ejecutó `release.yml`.
+
+**Causa:** El workflow se activa cuando se **publica** un release, no cuando se hace push de tags.
+
+**Solución:**
+1. Verifica que Release Please haya creado el release:
+   ```bash
+   gh release list
+   ```
+2. Verifica que el release esté "published" (no draft):
+   ```bash
+   gh release view v1.2.0
+   ```
+3. Ver si el workflow se ejecutó:
+   ```bash
+   gh run list --workflow=release.yml --limit 5
+   ```
+
+### Error: "Permission denied" en update-gitops
+
+**Problema:** El job `update-gitops` falla con error 403.
+
+**Causa:** Falta el secret `GITOPS_PAT` o no tiene permisos correctos.
+
+**Solución:**
+```bash
+# Crear nuevo PAT en: https://github.com/settings/tokens?type=beta
+# Permisos: Contents (Read and write) para repo gitops-cf
+
+# Agregarlo como secret
+gh secret set GITOPS_PAT --repo parraletz/books-api
+```
+
+Verifica que el PAT tenga acceso al repo GitOps:
+```bash
+# Listar secrets (no muestra valores)
+gh secret list --repo parraletz/books-api
+```
+
+### El tag no se actualiza en GitOps repo
+
+**Problema:** El workflow se ejecuta pero no actualiza `values.yaml`.
+
+**Causa:** El path o formato del values.yaml es incorrecto.
+
+**Solución:**
+```bash
+# Verificar estructura en gitops-cf
+cd gitops-cf
+ls -la books/api/values.yaml
+
+# Verificar formato (debe tener):
+cat books/api/values.yaml
+# image:
+#   tag: "1.0.0"
+```
+
 ### Error: "Permission denied to write to packages"
 
 Solución: Verifica que el workflow tenga permisos:
 ```yaml
 permissions:
-  contents: read
+  contents: write
   packages: write
 ```
 
@@ -236,9 +316,16 @@ Verifica que:
 
 ### Ver logs de los workflows
 
-1. Ve a la pestaña "Actions"
-2. Click en el workflow específico
-3. Click en el job para ver logs detallados
+```bash
+# Listar runs recientes
+gh run list --limit 10
+
+# Ver detalles de un run
+gh run view <run-id> --log
+
+# Ver solo el workflow de release
+gh run list --workflow=release.yml --limit 5
+```
 
 ## Recursos adicionales
 
