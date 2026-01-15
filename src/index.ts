@@ -75,6 +75,7 @@ app.get("/", (c) => {
 app.get("/health", (c) => {
   return c.json({
     status: "healthy",
+    database: "ok",
     timestamp: new Date().toISOString(),
   })
 })
