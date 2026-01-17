@@ -80,6 +80,10 @@ app.get("/health", (c) => {
   })
 })
 
+app.get("/books/hi", (c) => {
+  return c.json({ message: "hi codigo facilito!" })
+})
+
 app.post("/books/new", (c) => {
   const body = c.body
   c.status(201)
