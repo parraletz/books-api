@@ -6,6 +6,8 @@ metadata:
 spec:
   scaleTargetRef:
     name: {{ include "books-api.fullname" . }}
+  minReplicaCount: {{ .Values.scaleObject.minReplicaCount }}
+  maxReplicaCount: {{ .Values.scaleObject.maxReplicaCount }}
   triggers:
   {{- if .Values.scaleObject.targetCPUUtilizationPercentage }}
   - type: cpu

@@ -88,8 +88,8 @@ readinessProbe:
 
 scaleObject:
   enabled: false
-  minReplicas: 2
-  maxReplicas: 10
+  minReplicaCount: 2
+  maxReplicaCount: 10
   targetCPUUtilizationPercentage: 80
   targetMemoryUtilizationPercentage: 80
 
