@@ -1,9 +1,10 @@
 import { Hono } from "hono"
+import { logger } from "hono/logger"
 import { prettyJSON } from "hono/pretty-json"
 
 const app = new Hono()
 app.use(prettyJSON())
-
+app.use(logger())
 const books: Array<{
   title: string
   author: string
@@ -139,7 +140,9 @@ app.get("/stress", (c) => {
     },
     result: {
       operationsPerformed: operationsCount,
-      operationsPerSecond: Math.round(operationsCount / (actualDuration / 1000)),
+      operationsPerSecond: Math.round(
+        operationsCount / (actualDuration / 1000),
+      ),
     },
     usage: {
       examples: [
