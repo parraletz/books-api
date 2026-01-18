@@ -1,6 +1,6 @@
 {
   "name": "books-api",
-  "version": "4.1.0",
+  "version": "4.1.1",
   "description": "Books API built with Hono and Bun",
   "scripts": {
     "dev": "bun run --hot src/index.ts",
