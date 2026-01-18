@@ -72,6 +72,30 @@ Al hacer push a `main`, Release Please creará automáticamente un PR con:
 - [DEPLOYMENT.md](DEPLOYMENT.md) - Guía de despliegue
 - [.github/workflows/README.md](.github/workflows/README.md) - Workflows CI/CD
 
+## 🧪 Testing Kubernetes Autoscaling
+
+Este proyecto incluye un endpoint `/stress` para demostrar el autoescalado de Kubernetes:
+
+```bash
+# Generar carga de CPU (5 segundos, intensidad media)
+curl http://localhost:3000/stress
+
+# Carga personalizada (15 segundos, alta intensidad)
+curl "http://localhost:3000/stress?duration=15000&intensity=high"
+
+# Script automatizado para testing continuo
+./scripts/stress-test.sh http://localhost:3000 10000 high 10
+```
+
+**Monitorear el autoescalado:**
+```bash
+kubectl top pods              # Ver uso de CPU/memoria
+kubectl get hpa              # Ver estado del HPA
+kubectl get pods -w          # Ver pods en tiempo real
+```
+
+**📚 Documentación completa:** [docs/STRESS_TEST.md](docs/STRESS_TEST.md)
+
 ## 🛠️ Scripts Disponibles
 
 ```bash
@@ -87,6 +111,9 @@ bun run docker:logs            # Ver logs de la API
 # Docker - Producción
 bun run docker:prod:build      # Build imagen de producción
 bun run docker:prod:run        # Ejecuta imagen de producción
+
+# Testing
+./scripts/stress-test.sh       # Test de carga para autoescalado
 ```
 
 ## 📂 Estructura del Proyecto
@@ -126,6 +153,7 @@ books-api/
 | [CONTRIBUTING.md](CONTRIBUTING.md) | Guía de contribución completa |
 | [README.Docker.md](README.Docker.md) | Guía de Docker |
 | [DEPLOYMENT.md](DEPLOYMENT.md) | Guía de despliegue |
+| [docs/STRESS_TEST.md](docs/STRESS_TEST.md) | Testing de autoescalado |
 | [CHANGELOG.md](CHANGELOG.md) | Historial de cambios |
 
 ## 📄 Licencia

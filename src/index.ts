@@ -68,6 +68,7 @@ app.get("/", (c) => {
     endpoints: {
       books: "/books",
       health: "/health",
+      stress: "/stress (GET with ?duration=5000&intensity=high)",
     },
   })
 })
@@ -92,6 +93,64 @@ app.post("/books/new", (c) => {
 
 app.get("/books", (c) => {
   return c.json(books)
+})
+
+// Endpoint para simular carga de CPU - útil para demostrar autoescalado
+app.get("/stress", (c) => {
+  const duration = parseInt(c.req.query("duration") || "5000") // Duración en ms (default: 5 segundos)
+  const intensity = c.req.query("intensity") || "medium" // low, medium, high
+
+  // Validar duración (máximo 30 segundos para evitar timeouts)
+  const maxDuration = 30000
+  const finalDuration = Math.min(duration, maxDuration)
+
+  // Configurar intensidad (iteraciones por ciclo)
+  const intensityMap: Record<string, number> = {
+    low: 100000,
+    medium: 1000000,
+    high: 10000000,
+  }
+  const iterations = intensityMap[intensity] || intensityMap.medium
+
+  const startTime = Date.now()
+  let operationsCount = 0
+
+  // Generar carga de CPU
+  while (Date.now() - startTime < finalDuration) {
+    // Operaciones matemáticas intensivas
+    for (let i = 0; i < iterations; i++) {
+      Math.sqrt(Math.random() * Math.PI)
+      Math.sin(Math.random() * 360)
+      Math.cos(Math.random() * 360)
+      operationsCount++
+    }
+  }
+
+  const endTime = Date.now()
+  const actualDuration = endTime - startTime
+
+  return c.json({
+    message: "CPU stress test completed",
+    params: {
+      requestedDuration: `${duration}ms`,
+      actualDuration: `${actualDuration}ms`,
+      intensity: intensity,
+      maxAllowedDuration: `${maxDuration}ms`,
+    },
+    result: {
+      operationsPerformed: operationsCount,
+      operationsPerSecond: Math.round(operationsCount / (actualDuration / 1000)),
+    },
+    usage: {
+      examples: [
+        "GET /stress (default: 5s, medium intensity)",
+        "GET /stress?duration=10000 (10 seconds, medium)",
+        "GET /stress?intensity=high (5 seconds, high)",
+        "GET /stress?duration=15000&intensity=low (15 seconds, low)",
+      ],
+    },
+    tip: "Use tools like 'kubectl top pods' or monitoring dashboards to observe CPU usage and autoscaling",
+  })
 })
 
 export default app
