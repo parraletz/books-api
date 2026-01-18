@@ -13,12 +13,12 @@ spec:
   - type: cpu
     metricType: Utilization
     metadata:
-      value: {{ .Values.scaleObject.targetCPUUtilizationPercentage }}
+      value: "{{ .Values.scaleObject.targetCPUUtilizationPercentage }}"
    {{- end }}
   {{- if .Values.scaleObject.targetMemoryUtilizationPercentage }}
   - type: memory
     metricType: Utilization
     metadata:
-      value: {{ .Values.scaleObject.targetMemoryUtilizationPercentage }}
+      value: "{{ .Values.scaleObject.targetMemoryUtilizationPercentage }}"
    {{- end }}
 {{- end  }}
