@@ -1,0 +1,22 @@
+{{- if .Values.scaleObject.enabled }}
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: {{ include "books-api.fullname" . }}
+spec:
+  scaleTargetRef:
+    name: {{ include "books-api.fullname" . }}
+  triggers:
+  {{- if .Values.scaleObject.targetCPUUtilizationPercentage }}
+  - type: cpu
+    metricType: Utilization
+    metadata:
+      value: {{ .Values.scaleObject.targetCPUUtilizationPercentage }}
+   {{- end }}
+  {{- if .Values.scaleObject.targetMemoryUtilizationPercentage }}
+  - type: memory
+    metricType: Utilization
+    metadata:
+      value: {{ .Values.scaleObject.targetMemoryUtilizationPercentage }}
+   {{- end }}
+{{- end  }}
