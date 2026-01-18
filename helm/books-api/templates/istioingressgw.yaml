@@ -1,0 +1,24 @@
+{{- if .Values.ingressGateway.enabled }}
+apiVersion: networking.istio.io/v1
+kind: Gateway
+metadata:
+  name: {{ include "books-api.fullname" . }}
+  labels:
+    {{- include "books-api.labels" . | nindent 4  }}
+  {{- with .Values.ingressGateway.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  selector:
+    istio: ingressgateway
+  servers:
+    - port:
+        number: 80
+        name: http
+        protocol: HTTP
+    {{- range .Values.ingressGateway.hosts }}
+      hosts:
+        - {{ .host | quote }}
+    {{- end}}
+{{- end }}

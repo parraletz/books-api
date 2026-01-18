@@ -1,0 +1,23 @@
+{{- if .Values.ingressGateway.enabled }}
+apiVersion: networking.istio.io/v1
+kind: VirtualService
+metadata:
+    name: {{ include "books-api.fullname" . }}
+    labels: 
+      {{- include "books-api.labels" . | nindent 4  }}
+spec:
+{{- range .Values.ingressGateway.hosts }}
+  hosts:
+  - {{ .host | quote }}
+{{- end}}
+  gateways:
+    - {{ include "books-api.fullname" . }}
+  http:
+    - match:
+        - uri:
+            prefix: /
+      route:
+        - destination:
+            port: 
+                number: {{ .Values.service.port  }}
+{{- end -}}

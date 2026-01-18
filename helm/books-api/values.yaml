@@ -58,6 +58,12 @@ ingress:
   #    hosts:
   #      - books-api.example.com
 
+ingressGateway:
+  enabled: false
+  annotations: {}
+  hosts:
+    - host: books-api.example.com
+
 resources:
   limits:
     cpu: 200m
