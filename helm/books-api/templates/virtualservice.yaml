@@ -2,14 +2,18 @@
 apiVersion: networking.istio.io/v1
 kind: VirtualService
 metadata:
-    name: {{ include "books-api.fullname" . }}
-    labels: 
-      {{- include "books-api.labels" . | nindent 4  }}
+  name: {{ include "books-api.fullname" . }}
+  labels:
+    {{- include "books-api.labels" . | nindent 4 }}
+  {{- with .Values.ingressGateway.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
 spec:
-{{- range .Values.ingressGateway.hosts }}
   hosts:
-  - {{ .host | quote }}
-{{- end}}
+  {{- range .Values.ingressGateway.hosts }}
+    - {{ .host | quote }}
+  {{- end }}
   gateways:
     - {{ include "books-api.fullname" . }}
   http:
@@ -20,5 +24,5 @@ spec:
         - destination:
             host: {{ include "books-api.fullname" . }}
             port:
-                number: {{ .Values.service.port  }}
+              number: {{ .Values.service.port }}
 {{- end -}}
