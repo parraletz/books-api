@@ -18,6 +18,7 @@ spec:
             prefix: /
       route:
         - destination:
-            port: 
+            host: {{ include "books-api.fullname" . }}
+            port:
                 number: {{ .Values.service.port  }}
 {{- end -}}
