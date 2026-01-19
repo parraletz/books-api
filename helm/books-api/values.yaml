@@ -59,7 +59,7 @@ ingress:
   #      - books-api.example.com
 
 ingressGateway:
-  enabled: false
+  enabled: true
   annotations: {}
   hosts:
     - host: books-api.example.com
