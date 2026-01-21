@@ -17,6 +17,9 @@ helm/books-api/
     ├── ingress.yaml       # Ingress (opcional)
     ├── serviceaccount.yaml # ServiceAccount
     ├── hpa.yaml           # HorizontalPodAutoscaler
+    ├── scaleobject.yaml   # KEDA ScaledObject (opcional)
+    ├── istioingressgw.yaml # Istio IngressGateway (opcional)
+    ├── virtualservice.yaml # Istio VirtualService (opcional)
     └── configmap.yaml     # ConfigMap
 ```
 
@@ -24,6 +27,8 @@ helm/books-api/
 
 - ✅ **Multi-replica**: Soporta múltiples réplicas para alta disponibilidad
 - ✅ **Autoscaling**: HPA configurado para escalar basado en CPU/memoria
+- ✅ **KEDA**: Soporte para event-driven autoscaling con ScaledObject
+- ✅ **Istio**: Integración con Istio Service Mesh (IngressGateway y VirtualService)
 - ✅ **Security**: Pod Security Context, non-root user, read-only filesystem
 - ✅ **Health Checks**: Liveness y readiness probes configurados
 - ✅ **Ingress**: Soporte para exponer la aplicación externamente
@@ -143,6 +148,8 @@ ingress:
 
 ### Habilitar Autoscaling
 
+#### Opción 1: HPA (Kubernetes nativo)
+
 ```yaml
 autoscaling:
   enabled: true
@@ -151,6 +158,37 @@ autoscaling:
   targetCPUUtilizationPercentage: 80
   targetMemoryUtilizationPercentage: 80
 ```
+
+#### Opción 2: KEDA ScaledObject (Recomendado)
+
+KEDA (Kubernetes Event Driven Autoscaling) proporciona capacidades avanzadas de autoscaling:
+
+```yaml
+scaleObject:
+  enabled: true
+  minReplicaCount: 2
+  maxReplicaCount: 10
+  targetCPUUtilizationPercentage: 80
+  targetMemoryUtilizationPercentage: 80
+```
+
+**Ventajas de KEDA sobre HPA:**
+- ✅ Event-driven autoscaling más flexible
+- ✅ Múltiples tipos de triggers (HTTP, colas, métricas personalizadas)
+- ✅ Scale-to-zero capability
+- ✅ Mejor manejo de picos de tráfico
+
+**Requisitos:**
+- KEDA debe estar instalado en el cluster
+
+```bash
+# Instalar KEDA con Helm
+helm repo add kedacore https://kedacore.github.io/charts
+helm repo update
+helm install keda kedacore/keda --namespace keda --create-namespace
+```
+
+**⚠️ Nota:** No habilites HPA y KEDA al mismo tiempo, ya que pueden entrar en conflicto. KEDA es la opción recomendada para escenarios avanzados.
 
 ### Recursos
 
@@ -163,6 +201,29 @@ resources:
     cpu: 250m
     memory: 256Mi
 ```
+
+### Istio Service Mesh (Opcional)
+
+Si tu cluster tiene Istio instalado, puedes habilitar la integración:
+
+```yaml
+# Habilitar Istio IngressGateway
+ingressGateway:
+  enabled: true
+  annotations: {}
+  hosts:
+    - host: books-api.example.com
+```
+
+**Características:**
+- ✅ Traffic management avanzado
+- ✅ Load balancing
+- ✅ Circuit breaking y retries
+- ✅ Observabilidad mejorada
+
+El chart automáticamente creará:
+- **Gateway**: Para gestionar tráfico entrante
+- **VirtualService**: Para enrutamiento interno
 
 ## Comandos Útiles
 
@@ -253,6 +314,104 @@ kubectl get pods -l app.kubernetes.io/name=books-api
 kubectl describe deployment my-books-api
 ```
 
+## KEDA - Event-Driven Autoscaling
+
+### ¿Qué es KEDA?
+
+KEDA (Kubernetes Event Driven Autoscaler) es un componente que permite escalar aplicaciones basándose en eventos y métricas personalizadas. A diferencia del HPA tradicional, KEDA ofrece:
+
+- 🎯 **Múltiples tipos de triggers**: CPU, memoria, HTTP, colas, bases de datos, etc.
+- 📉 **Scale-to-zero**: Reducir a cero réplicas cuando no hay tráfico (ahorra costos)
+- ⚡ **Event-driven**: Reacciona instantáneamente a eventos externos
+- 🔧 **Extensible**: Más de 50+ scalers disponibles
+
+### Instalación de KEDA
+
+KEDA debe estar instalado en tu cluster antes de usar el ScaledObject:
+
+```bash
+# Agregar el repositorio de KEDA
+helm repo add kedacore https://kedacore.github.io/charts
+helm repo update
+
+# Instalar KEDA
+helm install keda kedacore/keda --namespace keda --create-namespace
+
+# Verificar instalación
+kubectl get pods -n keda
+```
+
+### Configuración en el Chart
+
+Para habilitar KEDA en el chart de Books API:
+
+```yaml
+# Deshabilitar HPA si está activo
+autoscaling:
+  enabled: false
+
+# Habilitar KEDA ScaledObject
+scaleObject:
+  enabled: true
+  minReplicaCount: 2
+  maxReplicaCount: 10
+  targetCPUUtilizationPercentage: 80
+  targetMemoryUtilizationPercentage: 80
+```
+
+### Ejemplo de Instalación con KEDA
+
+```bash
+# Instalar con KEDA habilitado
+helm install my-books-api oci://ghcr.io/parraletz/charts/books-api \
+  --version 1.0.0 \
+  --set scaleObject.enabled=true \
+  --set autoscaling.enabled=false \
+  --set scaleObject.minReplicaCount=1 \
+  --set scaleObject.maxReplicaCount=20
+```
+
+### Verificar KEDA en Acción
+
+```bash
+# Ver el ScaledObject
+kubectl get scaledobject
+
+# Describir el ScaledObject
+kubectl describe scaledobject my-books-api
+
+# Ver métricas de KEDA
+kubectl get hpa  # KEDA crea un HPA internamente
+
+# Ver logs de KEDA
+kubectl logs -n keda -l app.kubernetes.io/name=keda-operator -f
+```
+
+### Comparación HPA vs KEDA
+
+| Característica | HPA | KEDA |
+|---------------|-----|------|
+| CPU/Memoria | ✅ | ✅ |
+| Scale-to-zero | ❌ | ✅ |
+| HTTP requests | ❌ | ✅ |
+| Colas (SQS, RabbitMQ) | ❌ | ✅ |
+| Bases de datos | ❌ | ✅ |
+| Métricas personalizadas | Complejo | ✅ Fácil |
+| Event-driven | ❌ | ✅ |
+
+### Cuándo Usar KEDA
+
+**Usa KEDA si:**
+- ✅ Necesitas scale-to-zero para ahorrar costos
+- ✅ Quieres escalar basándose en colas de mensajes
+- ✅ Necesitas métricas personalizadas de forma sencilla
+- ✅ Tienes tráfico variable o por eventos
+
+**Usa HPA si:**
+- ✅ Solo necesitas escalar por CPU/memoria
+- ✅ Siempre necesitas al menos 1 réplica
+- ✅ Prefieres usar componentes nativos de Kubernetes
+
 ## Troubleshooting
 
 ### El chart no se encuentra en OCI registry
@@ -287,6 +446,47 @@ kubectl logs <pod-name>
 kubectl get pod <pod-name> -o jsonpath='{.spec.containers[0].image}'
 ```
 
+### KEDA no escala los pods
+
+```bash
+# Verificar que KEDA esté instalado
+kubectl get pods -n keda
+
+# Verificar el ScaledObject
+kubectl describe scaledobject my-books-api
+
+# Ver eventos del ScaledObject
+kubectl get events --sort-by='.lastTimestamp' | grep ScaledObject
+
+# Verificar que el HPA creado por KEDA esté activo
+kubectl get hpa
+
+# Ver logs del operador de KEDA
+kubectl logs -n keda -l app=keda-operator -f
+```
+
+**Problemas comunes:**
+- KEDA no instalado en el cluster
+- HPA y ScaledObject habilitados simultáneamente (conflicto)
+- Métricas no disponibles (metrics-server no instalado)
+- Valores de trigger incorrectos
+
+### Conflicto entre HPA y KEDA
+
+Si ambos están habilitados simultáneamente:
+
+```bash
+# Verificar si hay conflicto
+kubectl get hpa
+kubectl get scaledobject
+
+# Solución: Deshabilitar uno de ellos
+helm upgrade my-books-api oci://ghcr.io/parraletz/charts/books-api \
+  --version 1.0.0 \
+  --set autoscaling.enabled=false \
+  --set scaleObject.enabled=true
+```
+
 ## Mejores Prácticas
 
 1. **Versionado**: Siempre especificar versión en producción
@@ -296,6 +496,11 @@ kubectl get pod <pod-name> -o jsonpath='{.spec.containers[0].image}'
 5. **Health Checks**: Configurar liveness y readiness probes
 6. **Security**: Usar non-root user, read-only filesystem
 7. **Monitoring**: Integrar con Prometheus/Grafana si es posible
+8. **Autoscaling**: 
+   - Usar KEDA para escenarios avanzados y event-driven scaling
+   - Usar HPA para autoscaling básico basado en CPU/memoria
+   - No habilitar ambos simultáneamente
+9. **Service Mesh**: Considerar Istio para producción con requisitos avanzados de networking
 
 ## Referencias
 
@@ -303,3 +508,5 @@ kubectl get pod <pod-name> -o jsonpath='{.spec.containers[0].image}'
 - [Helm OCI Support](https://helm.sh/docs/topics/registries/)
 - [GitHub Packages](https://docs.github.com/en/packages)
 - [Kubernetes Best Practices](https://kubernetes.io/docs/concepts/configuration/overview/)
+- [KEDA Documentation](https://keda.sh/docs/)
+- [Istio Documentation](https://istio.io/latest/docs/)

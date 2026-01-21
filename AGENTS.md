@@ -178,6 +178,7 @@ app.use(prettyJSON())
 - `chore`: Maintenance tasks
 - `ci`: CI/CD changes
 - `build`: Build system changes
+- `revert`: Reverts a previous commit
 
 ### Examples
 ```bash
