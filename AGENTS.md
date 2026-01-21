@@ -5,11 +5,12 @@ This document provides essential information for AI coding agents working in thi
 ## Project Overview
 
 - **Runtime:** Bun (JavaScript runtime)
-- **Language:** TypeScript (strict mode)
+- **Language:** TypeScript (strict mode enabled)
 - **Framework:** Hono (lightweight web framework)
-- **Database:** PostgreSQL
-- **Cache:** Redis
-- **Container:** Docker
+- **Database:** PostgreSQL (schema exists, not integrated yet)
+- **Cache:** Redis (configured, not integrated yet)
+- **Container:** Docker + Kubernetes with ArgoCD GitOps
+- **Autoscaling:** KEDA HTTP Add-on (v0.11.1)
 
 ## Build, Lint & Test Commands
 
@@ -20,40 +21,37 @@ bun install                    # Install dependencies
 bun run --bun src/index.ts     # Run without hot reload
 ```
 
-### Docker Development
+### Docker
 ```bash
 bun run docker:dev             # Start full stack (API, PostgreSQL, Redis, Adminer)
 bun run docker:dev:build       # Build and start
 bun run docker:down            # Stop containers
 bun run docker:down:volumes    # Stop and remove volumes
 bun run docker:logs            # Follow API logs
-```
-
-### Docker Production
-```bash
 bun run docker:prod:build      # Build production image
 bun run docker:prod:run        # Run production container
 ```
 
 ### Testing
 ```bash
-bun test                       # Run all tests (currently none configured)
-# No test framework configured yet - use vitest or bun:test when implementing
+bun test                              # Run all tests (none configured yet)
+bun test path/to/test.test.ts         # Run specific test file
+bun test --grep "test name pattern"   # Run tests matching pattern
+# Consider adding vitest or bun:test when implementing tests
 ```
 
-### Linting & Type Checking
+### Helm Charts
 ```bash
-# No linter configured yet - consider adding:
-# bun add -d @biomejs/biome    # Fast linter/formatter
-# or
-# bun add -d eslint @typescript-eslint/parser @typescript-eslint/eslint-plugin
+helm template books-api ./helm/books-api -f gitops/values-staging.yaml   # Test template rendering
+helm lint ./helm/books-api                                                # Lint chart
+helm package helm/books-api -d .helm-charts                              # Package chart
+# Chart version bump triggers automatic CI/CD release to OCI registry
 ```
 
-### Running Single Tests
+### Linting
 ```bash
-# When tests are added, use:
-bun test path/to/test.test.ts          # Run specific test file
-bun test --grep "test name pattern"    # Run tests matching pattern
+# No linter configured yet - code style is enforced manually
+# Consider adding: bun add -d @biomejs/biome
 ```
 
 ## Code Style Guidelines
