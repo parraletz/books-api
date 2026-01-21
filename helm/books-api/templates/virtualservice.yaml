@@ -21,8 +21,33 @@ spec:
         - uri:
             prefix: /
       route:
+        {{- if .Values.httpScaledObject.enabled }}
+        # Route traffic through KEDA HTTP Add-on interceptor for HTTP-based autoscaling
+        - destination:
+            host: {{ .Values.httpScaledObject.interceptor.service }}.{{ .Values.httpScaledObject.interceptor.namespace }}.svc.cluster.local
+            port:
+              number: {{ .Values.httpScaledObject.interceptor.port }}
+          headers:
+            request:
+              set:
+                # Required header for KEDA HTTP Add-on to route to the correct service
+                # This tells the interceptor which internal service to forward requests to
+                # regardless of the external domain in the Host header
+                {{- if .Values.httpScaledObject.interceptor.targetHost }}
+                x-keda-http-host: {{ .Values.httpScaledObject.interceptor.targetHost }}
+                {{- else }}
+                x-keda-http-host: {{ include "books-api.fullname" . }}.{{ .Release.Namespace }}.svc.cluster.local
+                {{- end }}
+              {{- if not .Values.httpScaledObject.interceptor.preserveHostHeader }}
+              # Replace external Host header with internal service name
+              add:
+                x-forwarded-host: {{ "{{" }} .Host {{ "}}" }}  # Preserve original host for debugging
+              {{- end }}
+        {{- else }}
+        # Direct routing to the service (no HTTP autoscaling)
         - destination:
             host: {{ include "books-api.fullname" . }}
             port:
               number: {{ .Values.service.port }}
+        {{- end }}
 {{- end -}}

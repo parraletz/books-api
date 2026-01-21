@@ -1,0 +1,39 @@
+{{- if .Values.httpScaledObject.enabled }}
+apiVersion: http.keda.sh/v1alpha1
+kind: HTTPScaledObject
+metadata:
+  name: {{ include "books-api.fullname" . }}
+  labels:
+    {{- include "books-api.labels" . | nindent 4 }}
+spec:
+  # Target deployment to scale
+  scaleTargetRef:
+    name: {{ .Values.httpScaledObject.scaleTargetRef.name | default (include "books-api.fullname" .) }}
+    kind: Deployment
+    apiVersion: apps/v1
+    service: {{ .Values.httpScaledObject.scaleTargetRef.service | default (include "books-api.fullname" .) }}
+    port: {{ .Values.httpScaledObject.scaleTargetRef.port | default .Values.service.port }}
+  
+  # Replica configuration
+  replicas:
+    min: {{ .Values.httpScaledObject.replicas.min }}
+    max: {{ .Values.httpScaledObject.replicas.max }}
+  
+  {{- if .Values.httpScaledObject.targetPendingRequests }}
+  # Target pending requests before scaling up
+  targetPendingRequests: {{ .Values.httpScaledObject.targetPendingRequests }}
+  {{- end }}
+  
+  {{- if .Values.httpScaledObject.cooldownPeriod }}
+  # Cooldown period before scaling to zero (seconds)
+  scaledownPeriod: {{ .Values.httpScaledObject.cooldownPeriod }}
+  {{- end }}
+  
+  {{- if .Values.httpScaledObject.scalingMetric }}
+  # Scaling metric configuration
+  scalingMetric:
+    # requestRate: requests per second per replica
+    # concurrency: concurrent requests per replica
+    {{- toYaml .Values.httpScaledObject.scalingMetric | nindent 4 }}
+  {{- end }}
+{{- end }}

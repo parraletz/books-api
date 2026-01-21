@@ -1,0 +1,125 @@
+# Example values for enabling KEDA HTTP Add-on
+# This configuration enables HTTP-based autoscaling with scale-to-zero capability
+
+# Disable default replica count (HTTPScaledObject will manage replicas)
+replicaCount: 2  # Only used if httpScaledObject, autoscaling, and scaleObject are all disabled
+
+image:
+  repository: ghcr.io/parraletz/books-api
+  pullPolicy: IfNotPresent
+  tag: "1.0.0"
+
+# Service configuration
+service:
+  type: ClusterIP
+  port: 80
+  targetPort: 3000
+
+# Enable Istio VirtualService for routing through KEDA interceptor
+ingressGateway:
+  enabled: true
+  hosts:
+    - host: books-api.example.com
+
+# Disable standard HPA
+autoscaling:
+  enabled: false
+
+# Disable standard KEDA ScaledObject
+scaleObject:
+  enabled: false
+
+# Enable KEDA HTTP Add-on for HTTP-based autoscaling
+httpScaledObject:
+  enabled: true
+  
+  # Target deployment and service
+  scaleTargetRef:
+    name: ""  # Uses chart fullname by default
+    service: ""  # Uses chart fullname by default
+    port: 80  # Service port
+  
+  # Replica configuration
+  replicas:
+    min: 0  # Scale to zero when no traffic (saves resources)
+    max: 10  # Maximum replicas under load
+  
+  # Scaling metric configuration
+  scalingMetric:
+    # Type: "requestRate" or "concurrency"
+    # - requestRate: scales based on requests per second
+    # - concurrency: scales based on concurrent requests
+    type: "requestRate"
+    value: "100"  # Target 100 requests/sec per replica
+  
+  # Number of pending requests before scaling up
+  targetPendingRequests: 100
+  
+  # Cooldown period before scaling to zero (seconds)
+  cooldownPeriod: 300  # Wait 5 minutes of no traffic before scaling to zero
+  
+  # KEDA HTTP Add-on interceptor configuration
+  interceptor:
+    namespace: "keda"  # Namespace where KEDA HTTP Add-on is installed
+    service: "keda-add-ons-http-interceptor-proxy"
+    port: 8080
+    
+    # Target host for routing (optional)
+    # Tells the interceptor which internal service to forward requests to
+    # Important: Required when using external domains through Istio Gateway
+    # Default (empty): uses <service-name>.<namespace>.svc.cluster.local
+    targetHost: ""
+    
+    # Preserve original Host header
+    # true: keeps external domain in Host header (e.g., books-api.example.com)
+    # false: replaces Host with internal service name
+    # Default: true (recommended for most cases)
+    preserveHostHeader: true
+
+  # Optional: Advanced timeout settings (uncomment if needed)
+  # Increase these if experiencing 502 errors with POST requests
+  # timeouts:
+  #   connect: 30s
+  #   responseHeader: 30s
+  #   expectContinue: 30s
+  
+  # Optional: Wait timeout for workload to scale up
+  # Increase if seeing "context marked done while waiting for workload reach > 0 replicas"
+  # conditionWaitTimeout: 60s
+
+# Environment variables
+env:
+  - name: NODE_ENV
+    value: "production"
+  - name: PORT
+    value: "3000"
+
+# Resource limits
+resources:
+  limits:
+    cpu: 200m
+    memory: 256Mi
+  requests:
+    cpu: 100m
+    memory: 128Mi
+
+# Health checks
+livenessProbe:
+  httpGet:
+    path: /
+    port: http
+  initialDelaySeconds: 10
+  periodSeconds: 10
+  timeoutSeconds: 3
+  successThreshold: 1
+  failureThreshold: 3
+
+readinessProbe:
+  httpGet:
+    path: /
+    port: http
+  initialDelaySeconds: 5
+  periodSeconds: 5
+  timeoutSeconds: 3
+  successThreshold: 1
+  failureThreshold: 3

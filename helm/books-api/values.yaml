@@ -106,6 +106,59 @@ autoscaling:
   targetCPUUtilizationPercentage: 80
   targetMemoryUtilizationPercentage: 80
 
+# KEDA HTTP Add-on configuration
+# Requires KEDA and KEDA HTTP Add-on installed in the cluster
+# Installation: helm install http-add-on kedacore/keda-add-ons-http --namespace keda
+httpScaledObject:
+  enabled: false
+  # Target service configuration (usually your app service)
+  scaleTargetRef:
+    # Deployment name (defaults to chart fullname)
+    name: ""
+    # Service name (defaults to chart fullname)
+    service: ""
+    # Service port (defaults to service.port)
+    port: 80
+  # Replica configuration
+  replicas:
+    min: 0  # Can scale to zero
+    max: 10
+  # HTTP scaling configuration
+  scalingMetric:
+    # requestRate: Target requests per second per replica
+    # concurrency: Target concurrent requests per replica
+    type: "requestRate"
+    value: "100"  # Target 100 requests/second per replica
+  # Target pending requests before scaling up
+  targetPendingRequests: 100
+  # Cooldown period configuration
+  cooldownPeriod: 300  # Seconds to wait before scaling down to zero
+  # KEDA HTTP Add-on interceptor configuration
+  interceptor:
+    # Namespace where KEDA HTTP Add-on is installed
+    namespace: "keda"
+    # Interceptor service name
+    service: "keda-add-ons-http-interceptor-proxy"
+    # Interceptor service port
+    port: 8080
+    # Target host for routing (defaults to service FQDN)
+    # This header tells the interceptor which service to forward requests to
+    # Important: Required when using external domains through Istio Gateway
+    targetHost: ""  # Default: <service-name>.<namespace>.svc.cluster.local
+    # Preserve original Host header
+    # If true, keeps the external domain in Host header
+    # If false, replaces Host header with internal service name
+    preserveHostHeader: true
+  # Optional: Advanced timeout settings for the interceptor
+  # Uncomment if experiencing 502 errors with POST requests
+  # timeouts:
+  #   connect: 30s
+  #   responseHeader: 30s
+  #   expectContinue: 30s
+  # Optional: Wait timeout for workload to scale up (default: 20s)
+  # Increase if seeing "context marked done while waiting for workload reach > 0 replicas"
+  # conditionWaitTimeout: 60s
+
 volumes: []
 volumeMounts: []
 
