@@ -33,7 +33,7 @@ NC='\033[0m' # No Color
 
 # Parámetros
 URL="${1:-http://localhost:3000/stress}"
-DURATION="${2:-10000}"
+DURATION="${2:-50000}"
 INTENSITY="${3:-high}"
 CONCURRENT="${4:-10}"
 

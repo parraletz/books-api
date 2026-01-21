@@ -96,6 +96,12 @@ scaleObject:
   enabled: false
   minReplicaCount: 2
   maxReplicaCount: 10
+  cooldownPeriod: 300  # Cooldown period in seconds
+  # HTTP scaling configuration (requires HTTPScaledObject to exist for interceptor routing)
+  http:
+    enabled: false
+    scalerAddress: "keda-add-ons-http-external-scaler.keda:9090"
+  # CPU/Memory scaling
   targetCPUUtilizationPercentage: 80
   targetMemoryUtilizationPercentage: 80
 

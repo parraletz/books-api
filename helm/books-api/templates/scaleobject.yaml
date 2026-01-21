@@ -8,17 +8,29 @@ spec:
     name: {{ include "books-api.fullname" . }}
   minReplicaCount: {{ .Values.scaleObject.minReplicaCount }}
   maxReplicaCount: {{ .Values.scaleObject.maxReplicaCount }}
+  {{- if .Values.scaleObject.cooldownPeriod }}
+  cooldownPeriod: {{ .Values.scaleObject.cooldownPeriod }}
+  {{- end }}
   triggers:
+  {{- if .Values.scaleObject.http }}
+  {{- if .Values.scaleObject.http.enabled }}
+  # HTTP-based scaling via KEDA HTTP Add-on external scaler
+  - type: external-push
+    metadata:
+      scalerAddress: {{ .Values.scaleObject.http.scalerAddress | default "keda-add-ons-http-external-scaler.keda:9090" }}
+      httpScaledObject: {{ include "books-api.fullname" . }}
+  {{- end }}
+  {{- end }}
   {{- if .Values.scaleObject.targetCPUUtilizationPercentage }}
   - type: cpu
     metricType: Utilization
     metadata:
       value: "{{ .Values.scaleObject.targetCPUUtilizationPercentage }}"
-   {{- end }}
+  {{- end }}
   {{- if .Values.scaleObject.targetMemoryUtilizationPercentage }}
   - type: memory
     metricType: Utilization
     metadata:
       value: "{{ .Values.scaleObject.targetMemoryUtilizationPercentage }}"
-   {{- end }}
-{{- end  }}
+  {{- end }}
+{{- end }}
