@@ -45,6 +45,10 @@ autoscaling:
   targetCPUUtilizationPercentage: 70
   targetMemoryUtilizationPercentage: 80
 
+# KEDA HTTP Add-on configuration (disabled in prod, using standard HPA)
+httpScaledObject:
+  enabled: false
+
 env:
   - name: NODE_ENV
     value: "production"

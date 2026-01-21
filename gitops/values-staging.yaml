@@ -39,6 +39,27 @@ resources:
 autoscaling:
   enabled: false
 
+# KEDA HTTP Add-on configuration
+httpScaledObject:
+  enabled: true
+  
+  scaleTargetRef:
+    name: ""  # Uses chart fullname by default
+    service: ""  # Uses chart fullname by default
+    port: 80
+  
+  replicas:
+    min: 0
+    max: 10
+  
+  scalingMetric:
+    type: "requestRate"
+    value: "100"
+  
+  targetPendingRequests: 100
+  
+  cooldownPeriod: 300
+
 env:
   - name: NODE_ENV
     value: "staging"
