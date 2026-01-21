@@ -53,8 +53,10 @@ httpScaledObject:
     max: 10
   
   scalingMetric:
-    type: "requestRate"
-    value: "100"
+    requestRate:
+      targetValue: 100
+      window: "1m"
+      granularity: "1s"
   
   targetPendingRequests: 100
   

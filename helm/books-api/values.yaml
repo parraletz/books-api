@@ -125,10 +125,14 @@ httpScaledObject:
     max: 10
   # HTTP scaling configuration
   scalingMetric:
-    # requestRate: Target requests per second per replica
-    # concurrency: Target concurrent requests per replica
-    type: "requestRate"
-    value: "100"  # Target 100 requests/second per replica
+    # Scale based on request rate (requests per second)
+    requestRate:
+      targetValue: 100  # Target 100 requests/sec per replica
+      window: "1m"      # Time window for rate calculation
+      granularity: "1s" # Time granularity for rate calculation
+    # Or scale based on concurrent requests (uncomment to use instead)
+    # concurrency:
+    #   targetValue: 100  # Target 100 concurrent requests per replica
   # Target pending requests before scaling up
   targetPendingRequests: 100
   # Cooldown period configuration

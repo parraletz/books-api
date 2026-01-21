@@ -32,7 +32,6 @@ spec:
   {{- if .Values.httpScaledObject.scalingMetric }}
   # Scaling metric configuration
   scalingMetric:
-    type: {{ .Values.httpScaledObject.scalingMetric.type }}
-    value: {{ .Values.httpScaledObject.scalingMetric.value | quote }}
+    {{- toYaml .Values.httpScaledObject.scalingMetric | nindent 4 }}
   {{- end }}
 {{- end }}

@@ -46,11 +46,15 @@ httpScaledObject:
   
   # Scaling metric configuration
   scalingMetric:
-    # Type: "requestRate" or "concurrency"
-    # - requestRate: scales based on requests per second
-    # - concurrency: scales based on concurrent requests
-    type: "requestRate"
-    value: "100"  # Target 100 requests/sec per replica
+    # Option 1: Scale based on request rate (requests per second)
+    requestRate:
+      targetValue: 100  # Target 100 requests/sec per replica
+      window: "1m"      # Time window for rate calculation
+      granularity: "1s" # Time granularity for rate calculation
+    
+    # Option 2: Scale based on concurrent requests (uncomment to use)
+    # concurrency:
+    #   targetValue: 100  # Target 100 concurrent requests per replica
   
   # Number of pending requests before scaling up
   targetPendingRequests: 100
