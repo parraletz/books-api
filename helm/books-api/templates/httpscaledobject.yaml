@@ -32,8 +32,7 @@ spec:
   {{- if .Values.httpScaledObject.scalingMetric }}
   # Scaling metric configuration
   scalingMetric:
-    # requestRate: requests per second per replica
-    # concurrency: concurrent requests per replica
-    {{- toYaml .Values.httpScaledObject.scalingMetric | nindent 4 }}
+    type: {{ .Values.httpScaledObject.scalingMetric.type }}
+    value: {{ .Values.httpScaledObject.scalingMetric.value | quote }}
   {{- end }}
 {{- end }}
