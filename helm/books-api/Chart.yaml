@@ -2,7 +2,7 @@ apiVersion: v2
 name: books-api
 description: A Helm chart for Books API - Built with Hono and Bun
 type: application
-version: 1.0.0
+version: 1.0.1
 appVersion: "1.0.0"
 keywords:
   - books
