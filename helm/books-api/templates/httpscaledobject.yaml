@@ -6,6 +6,12 @@ metadata:
   labels:
     {{- include "books-api.labels" . | nindent 4 }}
 spec:
+  {{- if .Values.httpScaledObject.hosts }}
+  # Hosts that this HTTPScaledObject will handle
+  hosts:
+    {{- toYaml .Values.httpScaledObject.hosts | nindent 4 }}
+  {{- end }}
+  
   # Target deployment to scale
   scaleTargetRef:
     name: {{ .Values.httpScaledObject.scaleTargetRef.name | default (include "books-api.fullname" .) }}
