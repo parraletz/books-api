@@ -1,0 +1,145 @@
+{{- if .Values.prometheus.alerts.enabled }}
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: {{ include "books-api.fullname" . }}
+  labels:
+    {{- include "books-api.labels" . | nindent 4 }}
+    {{- with .Values.prometheus.alerts.labels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+  {{- with .Values.prometheus.alerts.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  {{- if .Values.prometheus.alerts.namespace }}
+  namespace: {{ .Values.prometheus.alerts.namespace }}
+  {{- end }}
+spec:
+  groups:
+    - name: {{ include "books-api.fullname" . }}.rules
+      rules:
+        {{- if .Values.prometheus.alerts.rules.highErrorRate.enabled }}
+        # High Error Rate Alert
+        - alert: {{ include "books-api.fullname" . }}-HighErrorRate
+          expr: |
+            (
+              sum(rate(http_requests_total{job="{{ include "books-api.fullname" . }}", status=~"5.."}[5m]))
+              /
+              sum(rate(http_requests_total{job="{{ include "books-api.fullname" . }}"}[5m]))
+            ) * 100 > {{ .Values.prometheus.alerts.rules.highErrorRate.threshold }}
+          for: {{ .Values.prometheus.alerts.rules.highErrorRate.for }}
+          labels:
+            severity: {{ .Values.prometheus.alerts.rules.highErrorRate.severity }}
+            service: {{ include "books-api.fullname" . }}
+          annotations:
+            summary: "High error rate detected in {{ include "books-api.fullname" . }}"
+            description: "Error rate is {{ "{{" }} printf \"%.2f\" $value {{ "}}" }}% (threshold: {{ .Values.prometheus.alerts.rules.highErrorRate.threshold }}%)"
+            runbook_url: {{ .Values.prometheus.alerts.rules.highErrorRate.runbookUrl | default "" | quote }}
+        {{- end }}
+
+        {{- if .Values.prometheus.alerts.rules.highLatency.enabled }}
+        # High Latency Alert
+        - alert: {{ include "books-api.fullname" . }}-HighLatency
+          expr: |
+            histogram_quantile(0.95,
+              sum(rate(http_request_duration_seconds_bucket{job="{{ include "books-api.fullname" . }}"}[5m])) by (le)
+            ) > {{ .Values.prometheus.alerts.rules.highLatency.threshold }}
+          for: {{ .Values.prometheus.alerts.rules.highLatency.for }}
+          labels:
+            severity: {{ .Values.prometheus.alerts.rules.highLatency.severity }}
+            service: {{ include "books-api.fullname" . }}
+          annotations:
+            summary: "High latency detected in {{ include "books-api.fullname" . }}"
+            description: "P95 latency is {{ "{{" }} printf \"%.2f\" $value {{ "}}" }}s (threshold: {{ .Values.prometheus.alerts.rules.highLatency.threshold }}s)"
+            runbook_url: {{ .Values.prometheus.alerts.rules.highLatency.runbookUrl | default "" | quote }}
+        {{- end }}
+
+        {{- if .Values.prometheus.alerts.rules.podNotReady.enabled }}
+        # Pod Not Ready Alert
+        - alert: {{ include "books-api.fullname" . }}-PodNotReady
+          expr: |
+            kube_pod_status_ready{pod=~"{{ include "books-api.fullname" . }}-.*", condition="true"} == 0
+          for: {{ .Values.prometheus.alerts.rules.podNotReady.for }}
+          labels:
+            severity: {{ .Values.prometheus.alerts.rules.podNotReady.severity }}
+            service: {{ include "books-api.fullname" . }}
+          annotations:
+            summary: "Pod not ready in {{ include "books-api.fullname" . }}"
+            description: "Pod {{ "{{" }} $labels.pod {{ "}}" }} has been not ready for more than {{ .Values.prometheus.alerts.rules.podNotReady.for }}"
+            runbook_url: {{ .Values.prometheus.alerts.rules.podNotReady.runbookUrl | default "" | quote }}
+        {{- end }}
+
+        {{- if .Values.prometheus.alerts.rules.highCpuUsage.enabled }}
+        # High CPU Usage Alert
+        - alert: {{ include "books-api.fullname" . }}-HighCpuUsage
+          expr: |
+            (
+              sum(rate(container_cpu_usage_seconds_total{pod=~"{{ include "books-api.fullname" . }}-.*"}[5m])) by (pod)
+              /
+              sum(kube_pod_container_resource_limits{pod=~"{{ include "books-api.fullname" . }}-.*", resource="cpu"}) by (pod)
+            ) * 100 > {{ .Values.prometheus.alerts.rules.highCpuUsage.threshold }}
+          for: {{ .Values.prometheus.alerts.rules.highCpuUsage.for }}
+          labels:
+            severity: {{ .Values.prometheus.alerts.rules.highCpuUsage.severity }}
+            service: {{ include "books-api.fullname" . }}
+          annotations:
+            summary: "High CPU usage in {{ include "books-api.fullname" . }}"
+            description: "Pod {{ "{{" }} $labels.pod {{ "}}" }} CPU usage is {{ "{{" }} printf \"%.2f\" $value {{ "}}" }}% (threshold: {{ .Values.prometheus.alerts.rules.highCpuUsage.threshold }}%)"
+            runbook_url: {{ .Values.prometheus.alerts.rules.highCpuUsage.runbookUrl | default "" | quote }}
+        {{- end }}
+
+        {{- if .Values.prometheus.alerts.rules.highMemoryUsage.enabled }}
+        # High Memory Usage Alert
+        - alert: {{ include "books-api.fullname" . }}-HighMemoryUsage
+          expr: |
+            (
+              sum(container_memory_working_set_bytes{pod=~"{{ include "books-api.fullname" . }}-.*"}) by (pod)
+              /
+              sum(kube_pod_container_resource_limits{pod=~"{{ include "books-api.fullname" . }}-.*", resource="memory"}) by (pod)
+            ) * 100 > {{ .Values.prometheus.alerts.rules.highMemoryUsage.threshold }}
+          for: {{ .Values.prometheus.alerts.rules.highMemoryUsage.for }}
+          labels:
+            severity: {{ .Values.prometheus.alerts.rules.highMemoryUsage.severity }}
+            service: {{ include "books-api.fullname" . }}
+          annotations:
+            summary: "High memory usage in {{ include "books-api.fullname" . }}"
+            description: "Pod {{ "{{" }} $labels.pod {{ "}}" }} memory usage is {{ "{{" }} printf \"%.2f\" $value {{ "}}" }}% (threshold: {{ .Values.prometheus.alerts.rules.highMemoryUsage.threshold }}%)"
+            runbook_url: {{ .Values.prometheus.alerts.rules.highMemoryUsage.runbookUrl | default "" | quote }}
+        {{- end }}
+
+        {{- if .Values.prometheus.alerts.rules.podRestarting.enabled }}
+        # Pod Restarting Too Often Alert
+        - alert: {{ include "books-api.fullname" . }}-PodRestartingTooOften
+          expr: |
+            increase(kube_pod_container_status_restarts_total{pod=~"{{ include "books-api.fullname" . }}-.*"}[1h]) > {{ .Values.prometheus.alerts.rules.podRestarting.threshold }}
+          for: {{ .Values.prometheus.alerts.rules.podRestarting.for }}
+          labels:
+            severity: {{ .Values.prometheus.alerts.rules.podRestarting.severity }}
+            service: {{ include "books-api.fullname" . }}
+          annotations:
+            summary: "Pod restarting too often in {{ include "books-api.fullname" . }}"
+            description: "Pod {{ "{{" }} $labels.pod {{ "}}" }} has restarted {{ "{{" }} printf \"%.0f\" $value {{ "}}" }} times in the last hour (threshold: {{ .Values.prometheus.alerts.rules.podRestarting.threshold }})"
+            runbook_url: {{ .Values.prometheus.alerts.rules.podRestarting.runbookUrl | default "" | quote }}
+        {{- end }}
+
+        {{- if .Values.prometheus.alerts.rules.noPodsRunning.enabled }}
+        # No Pods Running Alert
+        - alert: {{ include "books-api.fullname" . }}-NoPodsRunning
+          expr: |
+            sum(kube_deployment_status_replicas_available{deployment="{{ include "books-api.fullname" . }}"}) == 0
+          for: {{ .Values.prometheus.alerts.rules.noPodsRunning.for }}
+          labels:
+            severity: {{ .Values.prometheus.alerts.rules.noPodsRunning.severity }}
+            service: {{ include "books-api.fullname" . }}
+          annotations:
+            summary: "No pods running for {{ include "books-api.fullname" . }}"
+            description: "Deployment {{ include "books-api.fullname" . }} has no available replicas"
+            runbook_url: {{ .Values.prometheus.alerts.rules.noPodsRunning.runbookUrl | default "" | quote }}
+        {{- end }}
+
+        {{- with .Values.prometheus.alerts.customRules }}
+        # Custom Rules
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+{{- end }}

@@ -201,6 +201,74 @@ prometheus:
     metricRelabelings: []
     # Target relabeling rules
     relabelings: []
+  # PrometheusRule for AlertManager alerts
+  alerts:
+    enabled: false
+    # Namespace where the PrometheusRule will be created (defaults to release namespace)
+    namespace: ""
+    # Additional labels for PrometheusRule discovery by Prometheus
+    labels: {}
+    # Annotations for the PrometheusRule
+    annotations: {}
+    # Predefined alerting rules
+    rules:
+      # High error rate (5xx responses)
+      highErrorRate:
+        enabled: true
+        threshold: 5  # Percentage of 5xx errors
+        for: "5m"
+        severity: "critical"
+        runbookUrl: ""
+      # High latency (P95)
+      highLatency:
+        enabled: true
+        threshold: 1  # Seconds
+        for: "5m"
+        severity: "warning"
+        runbookUrl: ""
+      # Pod not ready
+      podNotReady:
+        enabled: true
+        for: "5m"
+        severity: "warning"
+        runbookUrl: ""
+      # High CPU usage
+      highCpuUsage:
+        enabled: true
+        threshold: 80  # Percentage
+        for: "10m"
+        severity: "warning"
+        runbookUrl: ""
+      # High memory usage
+      highMemoryUsage:
+        enabled: true
+        threshold: 80  # Percentage
+        for: "10m"
+        severity: "warning"
+        runbookUrl: ""
+      # Pod restarting too often
+      podRestarting:
+        enabled: true
+        threshold: 3  # Restarts in last hour
+        for: "5m"
+        severity: "warning"
+        runbookUrl: ""
+      # No pods running
+      noPodsRunning:
+        enabled: true
+        for: "1m"
+        severity: "critical"
+        runbookUrl: ""
+    # Custom alerting rules (raw PrometheusRule format)
+    customRules: []
+    # - alert: CustomAlert
+    #   expr: my_custom_metric > 100
+    #   for: 5m
+    #   labels:
+    #     severity: warning
+    #   annotations:
+    #     summary: "Custom alert triggered"
+    #     description: "Value is {{ $value }}"
 
 opentelemetry:
   enabled: false

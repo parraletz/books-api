@@ -8,6 +8,8 @@ import { register, booksCreatedTotal, booksListRequestsTotal } from "./metrics";
 import { metricsMiddleware } from "./metrics/middleware";
 import { tracingMiddleware } from "./metrics/tracing";
 import { startRuntimeMetricsCollection } from "./metrics/runtime";
+import { getTracer } from "./metrics/otel";
+import { SpanStatusCode } from "@opentelemetry/api";
 
 const app = new Hono();
 app.use(prettyJSON());
@@ -81,6 +83,7 @@ app.get("/", (c) => {
       books: "/books",
       health: "/health",
       stress: "/stress (GET with ?duration=5000&intensity=high)",
+      trace: "/trace (GET with ?operation=myOperation&steps=3&delay=100)",
     },
   });
 });
@@ -112,6 +115,98 @@ app.post("/books/new", (c) => {
 app.get("/books", (c) => {
   booksListRequestsTotal.inc();
   return c.json(books);
+});
+
+// Endpoint para generar trazas personalizadas - útil para demostrar OpenTelemetry
+app.get("/trace", async (c) => {
+  const tracer = getTracer("books-api-demo");
+  const operation = c.req.query("operation") || "demo-operation";
+  const steps = Math.min(parseInt(c.req.query("steps") || "3"), 10);
+  const delay = Math.min(parseInt(c.req.query("delay") || "100"), 1000);
+
+  const spans: Array<{ name: string; duration: number; status: string }> = [];
+
+  // Crear span padre
+  return tracer.startActiveSpan(`${operation}`, async (parentSpan) => {
+    parentSpan.setAttribute("operation.name", operation);
+    parentSpan.setAttribute("operation.steps", steps);
+    parentSpan.setAttribute("operation.delay", delay);
+
+    try {
+      for (let i = 1; i <= steps; i++) {
+        // Crear span hijo para cada paso
+        await tracer.startActiveSpan(`${operation}-step-${i}`, async (childSpan) => {
+          const stepStart = Date.now();
+
+          childSpan.setAttribute("step.number", i);
+          childSpan.setAttribute("step.total", steps);
+          childSpan.addEvent(`Starting step ${i}`);
+
+          // Simular trabajo con delay
+          await new Promise((resolve) => setTimeout(resolve, delay));
+
+          // Simular alguna operación
+          const result = Math.random();
+          childSpan.setAttribute("step.result", result);
+
+          // Simular un error ocasional en el paso 2 si hay más de 2 pasos
+          if (i === 2 && steps > 2 && result < 0.1) {
+            childSpan.setStatus({
+              code: SpanStatusCode.ERROR,
+              message: "Random error in step 2",
+            });
+            childSpan.recordException(new Error("Simulated error"));
+            spans.push({
+              name: `${operation}-step-${i}`,
+              duration: Date.now() - stepStart,
+              status: "error",
+            });
+          } else {
+            childSpan.setStatus({ code: SpanStatusCode.OK });
+            spans.push({
+              name: `${operation}-step-${i}`,
+              duration: Date.now() - stepStart,
+              status: "ok",
+            });
+          }
+
+          childSpan.addEvent(`Completed step ${i}`);
+          childSpan.end();
+        });
+      }
+
+      parentSpan.setStatus({ code: SpanStatusCode.OK });
+      parentSpan.addEvent("Operation completed successfully");
+    } catch (error) {
+      parentSpan.setStatus({
+        code: SpanStatusCode.ERROR,
+        message: error instanceof Error ? error.message : "Unknown error",
+      });
+      parentSpan.recordException(error as Error);
+    } finally {
+      parentSpan.end();
+    }
+
+    return c.json({
+      message: "Trace generated successfully",
+      trace: {
+        operation,
+        totalSteps: steps,
+        delayPerStep: `${delay}ms`,
+        spans,
+      },
+      usage: {
+        examples: [
+          "GET /trace (default: 3 steps, 100ms delay)",
+          "GET /trace?operation=checkout (custom operation name)",
+          "GET /trace?steps=5 (5 nested spans)",
+          "GET /trace?delay=200 (200ms per step)",
+          "GET /trace?operation=payment&steps=4&delay=150",
+        ],
+      },
+      tip: "View traces in Jaeger, Grafana Tempo, or your OTLP-compatible backend",
+    });
+  });
 });
 
 // Endpoint para simular carga de CPU - útil para demostrar autoescalado

@@ -135,6 +135,54 @@ books-api/
 └── release-please-config.json # Configuración de releases
 ```
 
+## 📊 Observabilidad (OpenTelemetry)
+
+Este proyecto incluye soporte completo para **OpenTelemetry** con trazas y métricas.
+
+### Configuración
+
+| Variable de Entorno | Descripción | Default |
+|---------------------|-------------|---------|
+| `OTEL_ENABLED` | Habilita OpenTelemetry | `false` |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | Endpoint del collector OTLP | `http://localhost:4318` |
+| `OTEL_SERVICE_NAME` | Nombre del servicio | `books-api` |
+| `OTEL_SERVICE_VERSION` | Versión del servicio | `1.0.0` |
+| `OTEL_DEBUG` | Habilita logs de debug | `false` |
+
+### Características
+
+- **Trazas:** Exportación via OTLP HTTP (`/v1/traces`)
+- **Métricas:** Exportación via OTLP HTTP (`/v1/metrics`) cada 10 segundos
+- **Batch Processing:** Las trazas se envían en lotes para mejor rendimiento
+- **Graceful Shutdown:** Limpieza automática al recibir SIGTERM
+
+### Ejemplo de uso
+
+```bash
+# Habilitar OpenTelemetry con Jaeger/Grafana Tempo
+OTEL_ENABLED=true \
+OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318 \
+OTEL_SERVICE_NAME=books-api \
+bun run dev
+```
+
+### Uso en código
+
+```typescript
+import { getTracer, getMeter } from "./metrics/otel"
+
+// Crear un span personalizado
+const tracer = getTracer()
+const span = tracer.startSpan("my-operation")
+// ... tu código
+span.end()
+
+// Crear métricas personalizadas
+const meter = getMeter()
+const counter = meter.createCounter("my_counter")
+counter.add(1)
+```
+
 ## 🔧 Tecnologías
 
 - **Runtime:** Bun
@@ -144,6 +192,7 @@ books-api/
 - **Containerización:** Docker
 - **CI/CD:** GitHub Actions
 - **Registry:** GitHub Container Registry
+- **Observabilidad:** OpenTelemetry (OTLP)
 
 ## 📖 Documentación
 
