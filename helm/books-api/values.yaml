@@ -182,6 +182,25 @@ prometheus:
   enabled: true
   path: /metrics
   port: "3000"
+  # ServiceMonitor for Prometheus Operator
+  serviceMonitor:
+    enabled: false
+    # Namespace where the ServiceMonitor will be created (defaults to release namespace)
+    namespace: ""
+    # Additional labels for ServiceMonitor discovery by Prometheus
+    labels: {}
+    # Annotations for the ServiceMonitor
+    annotations: {}
+    # Scrape interval (e.g., "30s", "1m")
+    interval: "30s"
+    # Scrape timeout (must be less than interval)
+    scrapeTimeout: "10s"
+    # Honor labels from the target
+    honorLabels: false
+    # Metric relabeling rules
+    metricRelabelings: []
+    # Target relabeling rules
+    relabelings: []
 
 opentelemetry:
   enabled: false

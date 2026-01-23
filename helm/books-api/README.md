@@ -61,6 +61,10 @@ The following table lists the configurable parameters of the Books API chart and
 | `prometheus.enabled` | Enable Prometheus scrape annotations | `true` |
 | `prometheus.path` | Metrics endpoint path | `/metrics` |
 | `prometheus.port` | Metrics port | `3000` |
+| `prometheus.serviceMonitor.enabled` | Create ServiceMonitor for Prometheus Operator | `false` |
+| `prometheus.serviceMonitor.interval` | Scrape interval | `30s` |
+| `prometheus.serviceMonitor.scrapeTimeout` | Scrape timeout | `10s` |
+| `prometheus.serviceMonitor.labels` | Additional labels for ServiceMonitor | `{}` |
 | `opentelemetry.enabled` | Enable OpenTelemetry tracing | `false` |
 | `opentelemetry.endpoint` | OTLP collector endpoint | `http://otel-collector:4318` |
 | `opentelemetry.serviceName` | Service name for traces | `books-api` |
@@ -91,6 +95,67 @@ Prometheus metrics are enabled by default and exposed at `/metrics`. The chart a
 
 ```bash
 helm install books-api ./helm/books-api --set prometheus.enabled=false
+```
+
+### ServiceMonitor (Prometheus Operator)
+
+If you're using [Prometheus Operator](https://github.com/prometheus-operator/prometheus-operator), you can create a ServiceMonitor instead of relying on pod annotations. The ServiceMonitor provides a more robust and declarative way to configure Prometheus scraping.
+
+**Enable ServiceMonitor:**
+
+```bash
+helm install books-api ./helm/books-api \
+  --set prometheus.serviceMonitor.enabled=true
+```
+
+**Configuration options:**
+
+```yaml
+prometheus:
+  enabled: true
+  path: /metrics
+  port: "3000"
+  serviceMonitor:
+    enabled: true
+    # Namespace for the ServiceMonitor (defaults to release namespace)
+    namespace: ""
+    # Labels to add for Prometheus discovery (match your Prometheus selector)
+    labels:
+      release: prometheus  # Common label for kube-prometheus-stack
+    # Scrape interval
+    interval: "30s"
+    # Scrape timeout (must be less than interval)
+    scrapeTimeout: "10s"
+    # Honor labels from the target
+    honorLabels: false
+    # Metric relabeling (drop, keep, replace metrics)
+    metricRelabelings: []
+    # Target relabeling (modify target labels before scrape)
+    relabelings: []
+```
+
+**Example with label selector:**
+
+If your Prometheus is configured to discover ServiceMonitors with specific labels:
+
+```yaml
+prometheus:
+  serviceMonitor:
+    enabled: true
+    labels:
+      release: kube-prometheus-stack
+      team: platform
+```
+
+**Verify ServiceMonitor is discovered:**
+
+```bash
+# Check ServiceMonitor was created
+kubectl get servicemonitor -l app.kubernetes.io/name=books-api
+
+# Check Prometheus targets (port-forward to Prometheus)
+kubectl port-forward svc/prometheus-operated 9090:9090 -n monitoring
+# Open http://localhost:9090/targets and look for books-api
 ```
 
 ### OpenTelemetry Tracing
@@ -185,6 +250,11 @@ prometheus:
   enabled: true
   path: /metrics
   port: "3000"
+  serviceMonitor:
+    enabled: true
+    labels:
+      release: kube-prometheus-stack
+    interval: "15s"
 
 opentelemetry:
   enabled: true
