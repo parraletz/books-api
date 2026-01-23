@@ -58,6 +58,150 @@ The following table lists the configurable parameters of the Books API chart and
 | `autoscaling.enabled` | Enable HPA | `false` |
 | `autoscaling.minReplicas` | Minimum replicas | `2` |
 | `autoscaling.maxReplicas` | Maximum replicas | `10` |
+| `prometheus.enabled` | Enable Prometheus scrape annotations | `true` |
+| `prometheus.path` | Metrics endpoint path | `/metrics` |
+| `prometheus.port` | Metrics port | `3000` |
+| `opentelemetry.enabled` | Enable OpenTelemetry tracing | `false` |
+| `opentelemetry.endpoint` | OTLP collector endpoint | `http://otel-collector:4318` |
+| `opentelemetry.serviceName` | Service name for traces | `books-api` |
+| `opentelemetry.debug` | Enable OTEL debug logging | `false` |
+| `grafana.dashboards.enabled` | Deploy Grafana dashboard ConfigMap | `false` |
+| `grafana.dashboards.labels` | Labels for dashboard sidecar discovery | `{grafana_dashboard: "1"}` |
+
+## Observability
+
+Books API includes comprehensive observability support with Prometheus metrics, OpenTelemetry tracing, and pre-built Grafana dashboards.
+
+### Prometheus Metrics
+
+Prometheus metrics are enabled by default and exposed at `/metrics`. The chart automatically adds scrape annotations to the pod.
+
+**Metrics exposed:**
+
+| Metric | Type | Description |
+|--------|------|-------------|
+| `http_requests_total` | Counter | Total HTTP requests by method, path, status_code |
+| `http_request_duration_seconds` | Histogram | Request latency distribution |
+| `http_requests_in_flight` | Gauge | Current active requests |
+| `books_created_total` | Counter | Total books created |
+| `books_list_requests_total` | Counter | Total book list requests |
+| `process_memory_usage_bytes` | Gauge | Memory usage (rss, heap, external) |
+
+**Disable Prometheus annotations:**
+
+```bash
+helm install books-api ./helm/books-api --set prometheus.enabled=false
+```
+
+### OpenTelemetry Tracing
+
+Enable distributed tracing with OpenTelemetry to send traces and metrics to an OTLP-compatible backend (Jaeger, Tempo, Datadog, etc.).
+
+**Enable OpenTelemetry:**
+
+```bash
+helm install books-api ./helm/books-api \
+  --set opentelemetry.enabled=true \
+  --set opentelemetry.endpoint="http://otel-collector:4318"
+```
+
+**Configuration options:**
+
+```yaml
+opentelemetry:
+  enabled: true
+  endpoint: "http://otel-collector:4318"  # OTLP HTTP endpoint
+  serviceName: "books-api"                 # Service name in traces
+  debug: false                             # Enable debug logging
+```
+
+**Environment variables injected when enabled:**
+
+| Variable | Description |
+|----------|-------------|
+| `OTEL_ENABLED` | Set to "true" |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | Collector endpoint |
+| `OTEL_SERVICE_NAME` | Service name |
+| `OTEL_SERVICE_VERSION` | Chart appVersion |
+| `OTEL_DEBUG` | Debug mode (if enabled) |
+
+**Example with Jaeger:**
+
+```yaml
+opentelemetry:
+  enabled: true
+  endpoint: "http://jaeger-collector:4318"
+  serviceName: "books-api"
+```
+
+### Grafana Dashboards
+
+The chart includes a pre-built Grafana dashboard that can be automatically provisioned using the Grafana sidecar.
+
+**Enable dashboard provisioning:**
+
+```bash
+helm install books-api ./helm/books-api \
+  --set grafana.dashboards.enabled=true
+```
+
+This creates a ConfigMap with the label `grafana_dashboard: "1"` that the Grafana sidecar automatically discovers and loads.
+
+**Dashboard panels included:**
+
+- Request Rate (req/s)
+- P95 Latency
+- Error Rate (5xx)
+- Requests In Flight
+- Request Rate by Endpoint
+- Latency by Endpoint (p50, p95, p99)
+- Request Rate by Status Code
+- Memory Usage (Heap, RSS)
+- Business Metrics (Books Created, List Requests)
+
+**Custom sidecar label:**
+
+If your Grafana uses a different sidecar label:
+
+```yaml
+grafana:
+  dashboards:
+    enabled: true
+    labels:
+      my_custom_label: "true"
+```
+
+**Manual import:**
+
+The dashboard JSON is also available at `grafana/dashboards/books-api-overview.json` in the repository for manual import.
+
+### Full Observability Stack Example
+
+Deploy with all observability features enabled:
+
+```yaml
+# values-observability.yaml
+prometheus:
+  enabled: true
+  path: /metrics
+  port: "3000"
+
+opentelemetry:
+  enabled: true
+  endpoint: "http://otel-collector.monitoring:4318"
+  serviceName: "books-api"
+  debug: false
+
+grafana:
+  dashboards:
+    enabled: true
+    labels:
+      grafana_dashboard: "1"
+```
+
+```bash
+helm install books-api ./helm/books-api -f values-observability.yaml
+```
 
 ### Example Custom Values
 

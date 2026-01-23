@@ -1,14 +1,25 @@
-import { Hono } from "hono"
-import { logger } from "hono/logger"
-import { prettyJSON } from "hono/pretty-json"
+import { initOpenTelemetry } from "./metrics/otel";
+initOpenTelemetry();
 
-const app = new Hono()
-app.use(prettyJSON())
-app.use(logger())
+import { Hono } from "hono";
+import { logger } from "hono/logger";
+import { prettyJSON } from "hono/pretty-json";
+import { register, booksCreatedTotal, booksListRequestsTotal } from "./metrics";
+import { metricsMiddleware } from "./metrics/middleware";
+import { tracingMiddleware } from "./metrics/tracing";
+import { startRuntimeMetricsCollection } from "./metrics/runtime";
+
+const app = new Hono();
+app.use(prettyJSON());
+app.use(logger());
+app.use("*", tracingMiddleware);
+app.use("*", metricsMiddleware);
+
+startRuntimeMetricsCollection();
 const books: Array<{
-  title: string
-  author: string
-  isbn: string
+  title: string;
+  author: string;
+  isbn: string;
 }> = [
   {
     title: "Dune",
@@ -60,7 +71,7 @@ const books: Array<{
     author: "Liu Cixin",
     isbn: "9780765382030",
   },
-]
+];
 
 app.get("/", (c) => {
   return c.json({
@@ -71,64 +82,71 @@ app.get("/", (c) => {
       health: "/health",
       stress: "/stress (GET with ?duration=5000&intensity=high)",
     },
-  })
-})
+  });
+});
 
 app.get("/health", (c) => {
   return c.json({
     status: "healthy",
     database: "ok",
     timestamp: new Date().toISOString(),
-  })
-})
+  });
+});
+
+app.get("/metrics", async (c) => {
+  c.header("Content-Type", register.contentType);
+  return c.text(await register.metrics());
+});
 
 app.get("/books/hi", (c) => {
-  return c.json({ message: "hi codigo facilito!" })
-})
+  return c.json({ message: "hi codigo facilito!" });
+});
 
 app.post("/books/new", (c) => {
-  const body = c.body
-  c.status(201)
-  return c.json({ body })
-})
+  booksCreatedTotal.inc();
+  const body = c.body;
+  c.status(201);
+  return c.json({ body });
+});
 
 app.get("/books", (c) => {
-  return c.json(books)
-})
+  booksListRequestsTotal.inc();
+  return c.json(books);
+});
 
 // Endpoint para simular carga de CPU - útil para demostrar autoescalado
 app.get("/stress", (c) => {
-  const duration = parseInt(c.req.query("duration") || "5000") // Duración en ms (default: 5 segundos)
-  const intensity = c.req.query("intensity") || "medium" // low, medium, high
+  const duration = parseInt(c.req.query("duration") || "5000"); // Duración en ms (default: 5 segundos)
+  const intensity = c.req.query("intensity") || "medium"; // low, medium, high
 
   // Validar duración (máximo 30 segundos para evitar timeouts)
-  const maxDuration = 30000
-  const finalDuration = Math.min(duration, maxDuration)
+  const maxDuration = 30000;
+  const finalDuration = Math.min(duration, maxDuration);
 
   // Configurar intensidad (iteraciones por ciclo)
   const intensityMap: Record<string, number> = {
     low: 100000,
     medium: 1000000,
     high: 10000000,
-  }
-  const iterations = intensityMap[intensity] || intensityMap.medium
+  };
+  const iterations = intensityMap[intensity] || intensityMap.medium;
 
-  const startTime = Date.now()
-  let operationsCount = 0
+  const startTime = Date.now();
+  let operationsCount = 0;
 
   // Generar carga de CPU
   while (Date.now() - startTime < finalDuration) {
     // Operaciones matemáticas intensivas
     for (let i = 0; i < iterations; i++) {
-      Math.sqrt(Math.random() * Math.PI)
-      Math.sin(Math.random() * 360)
-      Math.cos(Math.random() * 360)
-      operationsCount++
+      Math.sqrt(Math.random() * Math.PI);
+      Math.sin(Math.random() * 360);
+      Math.cos(Math.random() * 360);
+      operationsCount++;
     }
   }
 
-  const endTime = Date.now()
-  const actualDuration = endTime - startTime
+  const endTime = Date.now();
+  const actualDuration = endTime - startTime;
 
   return c.json({
     message: "CPU stress test completed",
@@ -153,7 +171,7 @@ app.get("/stress", (c) => {
       ],
     },
     tip: "Use tools like 'kubectl top pods' or monitoring dashboards to observe CPU usage and autoscaling",
-  })
-})
+  });
+});
 
-export default app
+export default app;

@@ -178,11 +178,36 @@ tolerations: []
 
 affinity: {}
 
+prometheus:
+  enabled: true
+  path: /metrics
+  port: "3000"
+
+opentelemetry:
+  enabled: false
+  endpoint: "http://otel-collector:4318"
+  serviceName: "books-api"
+  debug: false
+
+grafana:
+  dashboards:
+    enabled: false
+    labels:
+      grafana_dashboard: "1"
+    annotations: {}
+
 env:
   - name: NODE_ENV
     value: "production"
   - name: PORT
     value: "3000"
+  # OpenTelemetry environment variables (controlled by opentelemetry.enabled)
+  # - name: OTEL_ENABLED
+  #   value: "true"
+  # - name: OTEL_EXPORTER_OTLP_ENDPOINT
+  #   value: "http://otel-collector:4318"
+  # - name: OTEL_SERVICE_NAME
+  #   value: "books-api"
 
 envFrom: []
 # - configMapRef:

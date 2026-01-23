@@ -15,6 +15,11 @@ spec:
     metadata:
       annotations:
         checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        {{- if .Values.prometheus.enabled }}
+        prometheus.io/scrape: "true"
+        prometheus.io/path: {{ .Values.prometheus.path | quote }}
+        prometheus.io/port: {{ .Values.prometheus.port | quote }}
+        {{- end }}
         {{- with .Values.podAnnotations }}
         {{- toYaml . | nindent 8 }}
         {{- end }}
@@ -48,7 +53,21 @@ spec:
         resources:
           {{- toYaml .Values.resources | nindent 12 }}
         env:
-          {{- toYaml .Values.env | nindent 12 }}
+        {{- toYaml .Values.env | nindent 10 }}
+        {{- if .Values.opentelemetry.enabled }}
+          - name: OTEL_ENABLED
+            value: "true"
+          - name: OTEL_EXPORTER_OTLP_ENDPOINT
+            value: {{ .Values.opentelemetry.endpoint | quote }}
+          - name: OTEL_SERVICE_NAME
+            value: {{ .Values.opentelemetry.serviceName | quote }}
+          - name: OTEL_SERVICE_VERSION
+            value: {{ .Chart.AppVersion | quote }}
+          {{- if .Values.opentelemetry.debug }}
+          - name: OTEL_DEBUG
+            value: "true"
+          {{- end }}
+        {{- end }}
         {{- with .Values.envFrom }}
         envFrom:
           {{- toYaml . | nindent 12 }}
