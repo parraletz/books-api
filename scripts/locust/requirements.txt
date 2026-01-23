@@ -1,0 +1,18 @@
+# =============================================================================
+# Locust Load Testing Dependencies
+# =============================================================================
+# These are additional dependencies beyond the base Locust installation.
+# The Dockerfile installs Locust separately with pinned versions.
+
+# No additional dependencies required for basic load testing
+# Add custom dependencies here if needed:
+
+# For JSON Schema validation (optional)
+# jsonschema>=4.0.0
+
+# For additional metrics/reporting (optional)
+# prometheus-client>=0.17.0
+
+# For database load testing (optional)
+# psycopg2-binary>=2.9.0
+# redis>=4.0.0

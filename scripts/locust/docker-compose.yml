@@ -1,0 +1,97 @@
+# =============================================================================
+# Docker Compose for Locust Load Testing
+# =============================================================================
+#
+# This compose file provides different configurations for running Locust:
+# - Single node (default): Good for development and small tests
+# - Distributed mode: Master + Workers for large-scale load testing
+#
+# USAGE:
+# ------
+# Single node mode:
+#   docker compose -f scripts/locust/docker-compose.yml up
+#
+# Distributed mode (1 master + 4 workers):
+#   docker compose -f scripts/locust/docker-compose.yml --profile distributed up --scale worker=4
+#
+# Against staging:
+#   LOCUST_HOST=https://books-api.staging.cloudnative.lat docker compose -f scripts/locust/docker-compose.yml up
+#
+# Headless mode for CI:
+#   docker compose -f scripts/locust/docker-compose.yml run --rm locust \
+#     --headless -u 100 -r 10 -t 5m
+#
+# =============================================================================
+
+services:
+  # ---------------------------------------------------------------------------
+  # Single Node Locust (Default)
+  # ---------------------------------------------------------------------------
+  locust:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8089:8089"
+    environment:
+      - LOCUST_HOST=${LOCUST_HOST:-http://host.docker.internal:3000}
+    command:
+      - --host=${LOCUST_HOST:-http://host.docker.internal:3000}
+      - --web-host=0.0.0.0
+      - --web-port=8089
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    profiles:
+      - default
+      - ""
+
+  # ---------------------------------------------------------------------------
+  # Distributed Mode - Master Node
+  # ---------------------------------------------------------------------------
+  master:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8089:8089"
+      - "5557:5557"
+    environment:
+      - LOCUST_HOST=${LOCUST_HOST:-http://host.docker.internal:3000}
+    command:
+      - --master
+      - --host=${LOCUST_HOST:-http://host.docker.internal:3000}
+      - --web-host=0.0.0.0
+      - --web-port=8089
+      - --expect-workers=${LOCUST_EXPECT_WORKERS:-4}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    profiles:
+      - distributed
+
+  # ---------------------------------------------------------------------------
+  # Distributed Mode - Worker Nodes
+  # ---------------------------------------------------------------------------
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      - LOCUST_HOST=${LOCUST_HOST:-http://host.docker.internal:3000}
+    command:
+      - --worker
+      - --master-host=master
+    depends_on:
+      - master
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    deploy:
+      replicas: 4
+    profiles:
+      - distributed
+
+# =============================================================================
+# Networks
+# =============================================================================
+networks:
+  default:
+    name: locust-network

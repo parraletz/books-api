@@ -96,7 +96,9 @@ scaleObject:
   enabled: false
   minReplicaCount: 2
   maxReplicaCount: 10
-  cooldownPeriod: 300  # Cooldown period in seconds
+  cooldownPeriod: 300  # Cooldown period in seconds before scaling to zero
+  pollingInterval: 30  # How often KEDA checks metrics (seconds)
+  restoreToOriginalReplicaCount: false  # Restore replicas when ScaledObject is deleted
   # HTTP scaling configuration (requires HTTPScaledObject to exist for interceptor routing)
   http:
     enabled: false
@@ -104,6 +106,18 @@ scaleObject:
   # CPU/Memory scaling
   targetCPUUtilizationPercentage: 80
   targetMemoryUtilizationPercentage: 80
+  # Scale down behavior - prevents aggressive scale down
+  scaleDown:
+    stabilizationWindowSeconds: 300  # Wait 5 minutes before scaling down
+    percentPolicy: 10   # Scale down max 10% of pods per period
+    podsPolicy: 1       # Scale down max 1 pod per period
+    periodSeconds: 60   # Period for scale down policies
+  # Scale up behavior - allows quick scale up
+  scaleUp:
+    stabilizationWindowSeconds: 0  # Scale up immediately
+    percentPolicy: 100  # Scale up max 100% of pods per period
+    podsPolicy: 4       # Scale up max 4 pods per period
+    periodSeconds: 15   # Period for scale up policies
 
 autoscaling:
   enabled: false

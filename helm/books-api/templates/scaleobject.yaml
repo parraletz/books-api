@@ -3,6 +3,8 @@ apiVersion: keda.sh/v1alpha1
 kind: ScaledObject
 metadata:
   name: {{ include "books-api.fullname" . }}
+  labels:
+    {{- include "books-api.labels" . | nindent 4 }}
 spec:
   scaleTargetRef:
     name: {{ include "books-api.fullname" . }}
@@ -11,6 +13,34 @@ spec:
   {{- if .Values.scaleObject.cooldownPeriod }}
   cooldownPeriod: {{ .Values.scaleObject.cooldownPeriod }}
   {{- end }}
+  {{- if .Values.scaleObject.pollingInterval }}
+  pollingInterval: {{ .Values.scaleObject.pollingInterval }}
+  {{- end }}
+  # Advanced scaling behavior configuration
+  advanced:
+    restoreToOriginalReplicaCount: {{ .Values.scaleObject.restoreToOriginalReplicaCount | default false }}
+    horizontalPodAutoscalerConfig:
+      behavior:
+        scaleDown:
+          stabilizationWindowSeconds: {{ .Values.scaleObject.scaleDown.stabilizationWindowSeconds | default 300 }}
+          policies:
+            - type: Percent
+              value: {{ .Values.scaleObject.scaleDown.percentPolicy | default 10 }}
+              periodSeconds: {{ .Values.scaleObject.scaleDown.periodSeconds | default 60 }}
+            - type: Pods
+              value: {{ .Values.scaleObject.scaleDown.podsPolicy | default 1 }}
+              periodSeconds: {{ .Values.scaleObject.scaleDown.periodSeconds | default 60 }}
+          selectPolicy: Min
+        scaleUp:
+          stabilizationWindowSeconds: {{ .Values.scaleObject.scaleUp.stabilizationWindowSeconds | default 0 }}
+          policies:
+            - type: Percent
+              value: {{ .Values.scaleObject.scaleUp.percentPolicy | default 100 }}
+              periodSeconds: {{ .Values.scaleObject.scaleUp.periodSeconds | default 15 }}
+            - type: Pods
+              value: {{ .Values.scaleObject.scaleUp.podsPolicy | default 4 }}
+              periodSeconds: {{ .Values.scaleObject.scaleUp.periodSeconds | default 15 }}
+          selectPolicy: Max
   triggers:
   {{- if .Values.scaleObject.http }}
   {{- if .Values.scaleObject.http.enabled }}
