@@ -10,6 +10,7 @@ import { tracingMiddleware } from "./metrics/tracing";
 import { startRuntimeMetricsCollection } from "./metrics/runtime";
 import { getTracer } from "./metrics/otel";
 import { SpanStatusCode } from "@opentelemetry/api";
+import * as k8s from "@kubernetes/client-node";
 
 const app = new Hono();
 app.use(prettyJSON());
@@ -82,6 +83,7 @@ app.get("/", (c) => {
     endpoints: {
       books: "/books",
       health: "/health",
+      pods: "/pods (GET with ?namespace=default)",
       stress: "/stress (GET with ?duration=5000&intensity=high)",
       trace: "/trace (GET with ?operation=myOperation&steps=3&delay=100)",
     },
@@ -207,6 +209,46 @@ app.get("/trace", async (c) => {
       tip: "View traces in Jaeger, Grafana Tempo, or your OTLP-compatible backend",
     });
   });
+});
+
+// Endpoint para listar pods - útil para demostrar RBAC y Service Accounts
+app.get("/pods", async (c) => {
+  const namespace = c.req.query("namespace") || "default";
+
+  try {
+    const kc = new k8s.KubeConfig();
+    kc.loadFromCluster();
+
+    const k8sApi = kc.makeApiClient(k8s.CoreV1Api);
+    const response = await k8sApi.listNamespacedPod({ namespace });
+
+    const pods = response.items.map((pod) => ({
+      name: pod.metadata?.name,
+      namespace: pod.metadata?.namespace,
+      status: pod.status?.phase,
+      podIP: pod.status?.podIP,
+      nodeName: pod.spec?.nodeName,
+      containers: pod.spec?.containers.map((container) => ({
+        name: container.name,
+        image: container.image,
+      })),
+      createdAt: pod.metadata?.creationTimestamp,
+    }));
+
+    return c.json({
+      namespace,
+      count: pods.length,
+      pods,
+    });
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : "Unknown error";
+    c.status(500);
+    return c.json({
+      error: "Failed to list pods",
+      message: errorMessage,
+      tip: "Ensure the Service Account has RBAC permissions to list pods in the namespace",
+    });
+  }
 });
 
 // Endpoint para simular carga de CPU - útil para demostrar autoescalado

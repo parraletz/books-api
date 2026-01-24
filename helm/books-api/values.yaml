@@ -19,6 +19,18 @@ serviceAccount:
   annotations: {}
   name: ""
 
+# RBAC configuration for Kubernetes API access
+# Required for the /pods endpoint to list pods in the namespace
+rbac:
+  create: true
+  annotations: {}
+  # Rules define what the ServiceAccount can access
+  # Default: read-only access to pods in the namespace
+  rules:
+    - apiGroups: [""]
+      resources: ["pods"]
+      verbs: ["get", "list", "watch"]
+
 podAnnotations: {}
 podLabels: {}
 
