@@ -98,6 +98,15 @@ jobs:
           cache-from: type=gha
 
       # ============================================
+      # Export image for scanning
+      # ============================================
+      - name: Export Docker image to tarball
+        run: |
+          docker save books-api:scan -o books-api-scan.tar
+          echo "Image exported to books-api-scan.tar"
+          ls -lh books-api-scan.tar
+
+      # ============================================
       # BOM - SBOM Generation
       # ============================================
       - name: Install BOM
@@ -109,9 +118,9 @@ jobs:
 
       - name: Generate SBOM with BOM
         run: |
-          echo "Generating SBOM for books-api:scan"
-          bom generate -i books-api:scan -o sbom.spdx.json --format json
-          bom generate -i books-api:scan -o sbom.spdx
+          echo "Generating SBOM from tarball"
+          bom generate --tarball books-api-scan.tar -o sbom.spdx.json --format json
+          bom generate --tarball books-api-scan.tar -o sbom.spdx
 
       - name: Upload SBOM artifacts
         uses: actions/upload-artifact@v4
@@ -137,7 +146,7 @@ jobs:
       - name: Run Trivy vulnerability scanner
         uses: aquasecurity/trivy-action@master
         with:
-          image-ref: 'books-api:scan'
+          input: 'books-api-scan.tar'
           format: 'json'
           output: 'trivy-results.json'
           severity: 'CRITICAL,HIGH,MEDIUM,LOW'
@@ -146,7 +155,7 @@ jobs:
       - name: Run Trivy for SARIF output
         uses: aquasecurity/trivy-action@master
         with:
-          image-ref: 'books-api:scan'
+          input: 'books-api-scan.tar'
           format: 'sarif'
           output: 'trivy-results.sarif'
           severity: 'CRITICAL,HIGH,MEDIUM,LOW'
@@ -155,7 +164,7 @@ jobs:
       - name: Run Trivy for table output
         uses: aquasecurity/trivy-action@master
         with:
-          image-ref: 'books-api:scan'
+          input: 'books-api-scan.tar'
           format: 'table'
           output: 'trivy-results.txt'
           severity: 'CRITICAL,HIGH,MEDIUM,LOW'

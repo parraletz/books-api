@@ -13,11 +13,65 @@ permissions:
   pull-requests: write
   security-events: write
   issues: write
+  actions: read
 
 jobs:
+  # Wait for CI to pass before proceeding with release
+  ci-check:
+    name: Wait for CI
+    runs-on: ubuntu-latest
+    steps:
+      - name: Wait for CI workflow to complete
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const maxAttempts = 30;
+            const delaySeconds = 10;
+
+            for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+              console.log(`Attempt ${attempt}/${maxAttempts}: Checking CI status...`);
+
+              // Get the CI workflow runs for this commit
+              const runs = await github.rest.actions.listWorkflowRunsForRepo({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                head_sha: context.sha,
+                event: 'push'
+              });
+
+              // Find the CI workflow run
+              const ciRun = runs.data.workflow_runs.find(run =>
+                run.name === 'CI - Test and Build' && run.head_sha === context.sha
+              );
+
+              if (!ciRun) {
+                console.log('CI workflow not found yet, waiting...');
+                await new Promise(resolve => setTimeout(resolve, delaySeconds * 1000));
+                continue;
+              }
+
+              console.log(`CI workflow status: ${ciRun.status}, conclusion: ${ciRun.conclusion}`);
+
+              if (ciRun.status === 'completed') {
+                if (ciRun.conclusion === 'success') {
+                  console.log('CI passed successfully!');
+                  return;
+                } else {
+                  core.setFailed(`CI workflow failed with conclusion: ${ciRun.conclusion}`);
+                  return;
+                }
+              }
+
+              // CI is still running, wait and retry
+              await new Promise(resolve => setTimeout(resolve, delaySeconds * 1000));
+            }
+
+            core.setFailed('Timeout waiting for CI workflow to complete');
+
   release:
     name: Create Release
     runs-on: ubuntu-latest
+    needs: ci-check
     outputs:
       release_created: ${{ steps.release.outputs.release_created }}
       tag_name: ${{ steps.release.outputs.tag_name }}
