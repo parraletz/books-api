@@ -131,231 +131,10 @@ jobs:
           subject-digest: ${{ steps.build.outputs.digest }}
           push-to-registry: true
 
-  security-scan:
-    name: Security Scan
-    runs-on: ubuntu-latest
-    needs: [release, build-and-push]
-    if: needs.release.outputs.release_created == 'true'
-    permissions:
-      contents: read
-      packages: read
-      security-events: write
-      issues: write
-
-    outputs:
-      trivy_summary: ${{ steps.trivy-summary.outputs.summary }}
-      bom_summary: ${{ steps.bom-summary.outputs.summary }}
-      has_critical: ${{ steps.check-critical.outputs.has_critical }}
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Log in to GitHub Container Registry
-        uses: docker/login-action@v3
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Pull Docker image
-        run: docker pull ghcr.io/${{ github.repository }}:${{ needs.release.outputs.version }}
-
-      # ============================================
-      # BOM - SBOM Generation
-      # ============================================
-      - name: Install BOM
-        run: |
-          curl -sSfL https://github.com/kubernetes-sigs/bom/releases/download/v0.7.1/bom-amd64-linux -o bom
-          chmod +x bom
-          sudo mv bom /usr/local/bin/bom
-          bom version
-
-      - name: Generate SBOM with BOM
-        run: |
-          echo "Generating SBOM for ghcr.io/${{ github.repository }}:${{ needs.release.outputs.version }}"
-          bom generate -i ghcr.io/${{ github.repository }}:${{ needs.release.outputs.version }} -o sbom.spdx.json --format json
-          bom generate -i ghcr.io/${{ github.repository }}:${{ needs.release.outputs.version }} -o sbom.spdx
-
-      - name: Upload SBOM artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: sbom-reports-${{ needs.release.outputs.version }}
-          path: |
-            sbom.spdx.json
-            sbom.spdx
-          retention-days: 90
-
-      - name: Generate BOM summary
-        id: bom-summary
-        run: |
-          if [ -f sbom.spdx.json ]; then
-            PACKAGE_COUNT=$(jq '.packages | length' sbom.spdx.json 2>/dev/null || echo "0")
-            SUMMARY="SBOM generated with $PACKAGE_COUNT packages"
-          else
-            SUMMARY="SBOM generation completed"
-          fi
-          echo "summary=$SUMMARY" >> $GITHUB_OUTPUT
-
-      # ============================================
-      # Trivy - Vulnerability Scanning
-      # ============================================
-      - name: Run Trivy vulnerability scanner
-        uses: aquasecurity/trivy-action@master
-        with:
-          image-ref: ghcr.io/${{ github.repository }}:${{ needs.release.outputs.version }}
-          format: 'json'
-          output: 'trivy-results.json'
-          severity: 'CRITICAL,HIGH,MEDIUM,LOW'
-          vuln-type: 'os,library'
-
-      - name: Run Trivy for SARIF output
-        uses: aquasecurity/trivy-action@master
-        with:
-          image-ref: ghcr.io/${{ github.repository }}:${{ needs.release.outputs.version }}
-          format: 'sarif'
-          output: 'trivy-results.sarif'
-          severity: 'CRITICAL,HIGH,MEDIUM,LOW'
-          vuln-type: 'os,library'
-
-      - name: Run Trivy for table output
-        uses: aquasecurity/trivy-action@master
-        with:
-          image-ref: ghcr.io/${{ github.repository }}:${{ needs.release.outputs.version }}
-          format: 'table'
-          output: 'trivy-results.txt'
-          severity: 'CRITICAL,HIGH,MEDIUM,LOW'
-          vuln-type: 'os,library'
-
-      - name: Upload Trivy scan results to GitHub Security tab
-        uses: github/codeql-action/upload-sarif@v4
-        if: always() && hashFiles('trivy-results.sarif') != ''
-        with:
-          sarif_file: 'trivy-results.sarif'
-
-      - name: Upload Trivy artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: trivy-reports-${{ needs.release.outputs.version }}
-          path: |
-            trivy-results.json
-            trivy-results.sarif
-            trivy-results.txt
-          retention-days: 90
-
-      - name: Analyze and summarize Trivy results
-        id: trivy-summary
-        run: |
-          if [ -f trivy-results.json ]; then
-            CRITICAL=$(jq '[.Results[]?.Vulnerabilities[]? | select(.Severity == "CRITICAL")] | length' trivy-results.json 2>/dev/null || echo "0")
-            HIGH=$(jq '[.Results[]?.Vulnerabilities[]? | select(.Severity == "HIGH")] | length' trivy-results.json 2>/dev/null || echo "0")
-            MEDIUM=$(jq '[.Results[]?.Vulnerabilities[]? | select(.Severity == "MEDIUM")] | length' trivy-results.json 2>/dev/null || echo "0")
-            LOW=$(jq '[.Results[]?.Vulnerabilities[]? | select(.Severity == "LOW")] | length' trivy-results.json 2>/dev/null || echo "0")
-            SUMMARY="Critical: $CRITICAL, High: $HIGH, Medium: $MEDIUM, Low: $LOW"
-
-            echo "critical=$CRITICAL" >> $GITHUB_OUTPUT
-            echo "high=$HIGH" >> $GITHUB_OUTPUT
-            echo "medium=$MEDIUM" >> $GITHUB_OUTPUT
-            echo "low=$LOW" >> $GITHUB_OUTPUT
-          else
-            SUMMARY="Scan completed - no results file"
-          fi
-          echo "summary=$SUMMARY" >> $GITHUB_OUTPUT
-
-      - name: Check for critical vulnerabilities
-        id: check-critical
-        run: |
-          HAS_CRITICAL="false"
-          if [ -f trivy-results.json ]; then
-            CRITICAL_COUNT=$(jq '[.Results[]?.Vulnerabilities[]? | select(.Severity == "CRITICAL")] | length' trivy-results.json 2>/dev/null || echo "0")
-            if [ "$CRITICAL_COUNT" -gt 0 ]; then
-              HAS_CRITICAL="true"
-              echo "::warning::Found $CRITICAL_COUNT critical vulnerabilities in release image!"
-            fi
-          fi
-          echo "has_critical=$HAS_CRITICAL" >> $GITHUB_OUTPUT
-
-      - name: Create GitHub Issue for Critical Vulnerabilities
-        if: steps.check-critical.outputs.has_critical == 'true'
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const fs = require('fs');
-            let criticalVulns = [];
-
-            try {
-              const trivyData = fs.readFileSync('trivy-results.json', 'utf8');
-              const trivyResults = JSON.parse(trivyData);
-
-              if (trivyResults.Results) {
-                for (const result of trivyResults.Results) {
-                  if (result.Vulnerabilities) {
-                    for (const vuln of result.Vulnerabilities) {
-                      if (vuln.Severity === 'CRITICAL') {
-                        criticalVulns.push({
-                          id: vuln.VulnerabilityID,
-                          pkg: vuln.PkgName,
-                          version: vuln.InstalledVersion,
-                          fixedVersion: vuln.FixedVersion || 'Not available'
-                        });
-                      }
-                    }
-                  }
-                }
-              }
-            } catch (error) {
-              console.log('Error reading Trivy results:', error);
-            }
-
-            let issueBody = `## 🚨 Critical Security Vulnerabilities in Release ${{ needs.release.outputs.version }}
-
-            **Image:** \`ghcr.io/${{ github.repository }}:${{ needs.release.outputs.version }}\`
-            **Release:** [v${{ needs.release.outputs.version }}](https://github.com/${{ github.repository }}/releases/tag/v${{ needs.release.outputs.version }})
-            **Scan Date:** ${new Date().toISOString()}
-
-            ### Critical Vulnerabilities Found
-
-            | CVE ID | Package | Installed Version | Fixed Version |
-            |--------|---------|-------------------|---------------|
-            `;
-
-            for (const vuln of criticalVulns.slice(0, 20)) {
-              issueBody += `| ${vuln.id} | ${vuln.pkg} | ${vuln.version} | ${vuln.fixedVersion} |\n`;
-            }
-
-            if (criticalVulns.length > 20) {
-              issueBody += `\n*... and ${criticalVulns.length - 20} more*\n`;
-            }
-
-            issueBody += `\n### Actions Required\n\n1. Update affected packages\n2. Create a patch release\n3. Close this issue once resolved`;
-
-            await github.rest.issues.create({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              title: `🚨 Critical Vulnerabilities in Release ${{ needs.release.outputs.version }}`,
-              body: issueBody,
-              labels: ['security', 'critical', 'automated']
-            });
-
-      - name: Add security summary to workflow
-        run: |
-          echo "## 🔒 Security Scan Results for v${{ needs.release.outputs.version }}" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### SBOM (BOM)" >> $GITHUB_STEP_SUMMARY
-          echo "${{ steps.bom-summary.outputs.summary }}" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### Vulnerability Scan (Trivy)" >> $GITHUB_STEP_SUMMARY
-          echo "| Severity | Count |" >> $GITHUB_STEP_SUMMARY
-          echo "|----------|-------|" >> $GITHUB_STEP_SUMMARY
-          echo "| 🔴 Critical | ${{ steps.trivy-summary.outputs.critical }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| 🟠 High | ${{ steps.trivy-summary.outputs.high }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| 🟡 Medium | ${{ steps.trivy-summary.outputs.medium }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| 🟢 Low | ${{ steps.trivy-summary.outputs.low }} |" >> $GITHUB_STEP_SUMMARY
-
   update-helm-chart:
     name: Update and Publish Helm Chart
     runs-on: ubuntu-latest
-    needs: [release, build-and-push, security-scan]
+    needs: [release, build-and-push]
     if: needs.release.outputs.release_created == 'true'
     permissions:
       contents: read
@@ -379,7 +158,7 @@ jobs:
       - name: Set up Helm
         uses: azure/setup-helm@v4
         with:
-          version: 'latest'
+          version: "latest"
 
       - name: Log in to GitHub Container Registry
         run: |
@@ -396,7 +175,7 @@ jobs:
   update-gitops:
     name: Update GitOps Repository
     runs-on: ubuntu-latest
-    needs: [release, build-and-push, security-scan, update-helm-chart]
+    needs: [release, build-and-push, update-helm-chart]
     if: needs.release.outputs.release_created == 'true'
 
     steps:
@@ -456,7 +235,7 @@ jobs:
   update-release-notes:
     name: Add Security Results to Release
     runs-on: ubuntu-latest
-    needs: [release, security-scan]
+    needs: [release]
     if: needs.release.outputs.release_created == 'true'
     permissions:
       contents: write
