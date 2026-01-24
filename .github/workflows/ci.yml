@@ -10,6 +10,11 @@ on:
       - main
       - develop
 
+permissions:
+  contents: read
+  security-events: write
+  issues: write
+
 jobs:
   test:
     name: Run Tests
@@ -69,3 +74,248 @@ jobs:
           curl -f http://localhost:3000 || exit 1
           docker stop test-container
           docker rm test-container
+
+  security-scan:
+    name: Security Scan
+    runs-on: ubuntu-latest
+    needs: docker-build-test
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build Docker image for scanning
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile
+          push: false
+          load: true
+          tags: books-api:scan
+          cache-from: type=gha
+
+      # ============================================
+      # BOM - SBOM Generation
+      # ============================================
+      - name: Install BOM
+        run: |
+          curl -sSfL https://github.com/kubernetes-sigs/bom/releases/latest/download/bom-linux-amd64 -o bom
+          chmod +x bom
+          sudo mv bom /usr/local/bin/bom
+          bom version
+
+      - name: Generate SBOM with BOM
+        run: |
+          echo "Generating SBOM for books-api:scan"
+          bom generate -i books-api:scan -o sbom.spdx.json --format json
+          bom generate -i books-api:scan -o sbom.spdx
+
+      - name: Upload SBOM artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbom-reports
+          path: |
+            sbom.spdx.json
+            sbom.spdx
+          retention-days: 30
+
+      - name: Analyze SBOM
+        id: bom-summary
+        run: |
+          if [ -f sbom.spdx.json ]; then
+            PACKAGE_COUNT=$(jq '.packages | length' sbom.spdx.json 2>/dev/null || echo "0")
+            echo "SBOM generated with $PACKAGE_COUNT packages"
+            echo "package_count=$PACKAGE_COUNT" >> $GITHUB_OUTPUT
+          fi
+
+      # ============================================
+      # Trivy - Vulnerability Scanning
+      # ============================================
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: 'books-api:scan'
+          format: 'json'
+          output: 'trivy-results.json'
+          severity: 'CRITICAL,HIGH,MEDIUM,LOW'
+          vuln-type: 'os,library'
+
+      - name: Run Trivy for SARIF output
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: 'books-api:scan'
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+          severity: 'CRITICAL,HIGH,MEDIUM,LOW'
+          vuln-type: 'os,library'
+
+      - name: Run Trivy for table output
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: 'books-api:scan'
+          format: 'table'
+          output: 'trivy-results.txt'
+          severity: 'CRITICAL,HIGH,MEDIUM,LOW'
+          vuln-type: 'os,library'
+
+      - name: Upload Trivy scan results to GitHub Security tab
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: 'trivy-results.sarif'
+
+      - name: Upload Trivy artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: trivy-reports
+          path: |
+            trivy-results.json
+            trivy-results.sarif
+            trivy-results.txt
+          retention-days: 30
+
+      - name: Analyze Trivy results
+        id: trivy-analyze
+        run: |
+          echo "## 🔒 Security Scan Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          if [ -f sbom.spdx.json ]; then
+            PACKAGE_COUNT=$(jq '.packages | length' sbom.spdx.json 2>/dev/null || echo "0")
+            echo "### SBOM (BOM)" >> $GITHUB_STEP_SUMMARY
+            echo "Total packages: $PACKAGE_COUNT" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          if [ -f trivy-results.json ]; then
+            CRITICAL=$(jq '[.Results[]?.Vulnerabilities[]? | select(.Severity == "CRITICAL")] | length' trivy-results.json 2>/dev/null || echo "0")
+            HIGH=$(jq '[.Results[]?.Vulnerabilities[]? | select(.Severity == "HIGH")] | length' trivy-results.json 2>/dev/null || echo "0")
+            MEDIUM=$(jq '[.Results[]?.Vulnerabilities[]? | select(.Severity == "MEDIUM")] | length' trivy-results.json 2>/dev/null || echo "0")
+            LOW=$(jq '[.Results[]?.Vulnerabilities[]? | select(.Severity == "LOW")] | length' trivy-results.json 2>/dev/null || echo "0")
+
+            echo "### Vulnerability Scan (Trivy)" >> $GITHUB_STEP_SUMMARY
+            echo "| Severity | Count |" >> $GITHUB_STEP_SUMMARY
+            echo "|----------|-------|" >> $GITHUB_STEP_SUMMARY
+            echo "| 🔴 Critical | $CRITICAL |" >> $GITHUB_STEP_SUMMARY
+            echo "| 🟠 High | $HIGH |" >> $GITHUB_STEP_SUMMARY
+            echo "| 🟡 Medium | $MEDIUM |" >> $GITHUB_STEP_SUMMARY
+            echo "| 🟢 Low | $LOW |" >> $GITHUB_STEP_SUMMARY
+
+            echo "critical=$CRITICAL" >> $GITHUB_OUTPUT
+            echo "high=$HIGH" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Check for critical vulnerabilities
+        id: check-critical
+        run: |
+          if [ -f trivy-results.json ]; then
+            CRITICAL_COUNT=$(jq '[.Results[]?.Vulnerabilities[]? | select(.Severity == "CRITICAL")] | length' trivy-results.json 2>/dev/null || echo "0")
+            if [ "$CRITICAL_COUNT" -gt 0 ]; then
+              echo "::error::Found $CRITICAL_COUNT critical vulnerabilities!"
+              echo "has_critical=true" >> $GITHUB_OUTPUT
+            else
+              echo "has_critical=false" >> $GITHUB_OUTPUT
+            fi
+          fi
+
+      - name: Create GitHub Issue for Critical Vulnerabilities
+        if: steps.check-critical.outputs.has_critical == 'true' && github.event_name == 'push'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            let criticalVulns = [];
+
+            try {
+              const trivyData = fs.readFileSync('trivy-results.json', 'utf8');
+              const trivyResults = JSON.parse(trivyData);
+
+              if (trivyResults.Results) {
+                for (const result of trivyResults.Results) {
+                  if (result.Vulnerabilities) {
+                    for (const vuln of result.Vulnerabilities) {
+                      if (vuln.Severity === 'CRITICAL') {
+                        criticalVulns.push({
+                          id: vuln.VulnerabilityID,
+                          pkg: vuln.PkgName,
+                          version: vuln.InstalledVersion,
+                          fixedVersion: vuln.FixedVersion || 'Not available'
+                        });
+                      }
+                    }
+                  }
+                }
+              }
+            } catch (error) {
+              console.log('Error reading Trivy results:', error);
+            }
+
+            const issueTitle = '🚨 Critical Security Vulnerabilities Detected in CI';
+
+            // Check for existing open issue
+            const existingIssues = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open',
+              labels: 'security,critical'
+            });
+
+            const existingIssue = existingIssues.data.find(issue => issue.title === issueTitle);
+
+            let issueBody = `## 🚨 Critical Security Vulnerabilities Detected
+
+            **Branch:** \`${{ github.ref_name }}\`
+            **Commit:** \`${{ github.sha }}\`
+            **Scan Date:** ${new Date().toISOString()}
+            **Workflow Run:** [View Details](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})
+
+            ### Critical Vulnerabilities Found (${criticalVulns.length})
+
+            | CVE ID | Package | Installed Version | Fixed Version |
+            |--------|---------|-------------------|---------------|
+            `;
+
+            for (const vuln of criticalVulns.slice(0, 20)) {
+              issueBody += `| ${vuln.id} | ${vuln.pkg} | ${vuln.version} | ${vuln.fixedVersion} |\n`;
+            }
+
+            if (criticalVulns.length > 20) {
+              issueBody += `\n*... and ${criticalVulns.length - 20} more critical vulnerabilities*\n`;
+            }
+
+            issueBody += `
+            ### Required Actions
+
+            1. Review the [full vulnerability report](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})
+            2. Update affected packages to their fixed versions
+            3. Re-run CI to verify fixes
+            4. Close this issue once all critical vulnerabilities are resolved
+            `;
+
+            if (existingIssue) {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: existingIssue.number,
+                body: `## Updated Scan Results (${new Date().toISOString()})\n\n${issueBody}`
+              });
+              console.log(`Updated existing issue #${existingIssue.number}`);
+            } else {
+              const newIssue = await github.rest.issues.create({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                title: issueTitle,
+                body: issueBody,
+                labels: ['security', 'critical', 'automated']
+              });
+              console.log(`Created new issue #${newIssue.data.number}`);
+            }
+
+      - name: Fail on critical vulnerabilities
+        if: steps.check-critical.outputs.has_critical == 'true'
+        run: |
+          echo "::error::Pipeline failed due to critical vulnerabilities. Please fix them before merging."
+          exit 1
