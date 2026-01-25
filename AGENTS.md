@@ -28,8 +28,6 @@ bun run docker:dev:build       # Build and start
 bun run docker:down            # Stop containers
 bun run docker:down:volumes    # Stop and remove volumes
 bun run docker:logs            # Follow API logs
-bun run docker:prod:build      # Build production image
-bun run docker:prod:run        # Run production container
 ```
 
 ### Testing
@@ -37,146 +35,105 @@ bun run docker:prod:run        # Run production container
 bun test                              # Run all tests (none configured yet)
 bun test path/to/test.test.ts         # Run specific test file
 bun test --grep "test name pattern"   # Run tests matching pattern
-# Consider adding vitest or bun:test when implementing tests
 ```
 
-### Helm Charts
+### Linting & Formatting
 ```bash
-helm template books-api ./helm/books-api -f gitops/values-staging.yaml   # Test template rendering
-helm lint ./helm/books-api                                                # Lint chart
-helm package helm/books-api -d .helm-charts                              # Package chart
-# Chart version bump triggers automatic CI/CD release to OCI registry
-```
-
-### Linting
-```bash
-# No linter configured yet - code style is enforced manually
-# Consider adding: bun add -d @biomejs/biome
+# Prettier configured (.prettierrc) but no format script yet
+# No linter configured - consider adding @biomejs/biome
 ```
 
 ## Code Style Guidelines
 
-### TypeScript Configuration
-- **Strict mode enabled:** All strict type checks are enforced
-- **JSX support:** `react-jsx` with `hono/jsx` import source
-- **No implicit any:** Always provide explicit types
+**CRITICAL:** This project uses Prettier with specific formatting rules. Always follow these patterns:
 
-### Import Style
+### Formatting Rules (Enforced by Prettier)
+- **Quotes:** Single quotes for strings (`'hello'` not `"hello"`)
+- **Semicolons:** No semicolons (enforced by Prettier)
+- **Indentation:** 2 spaces
+- **Trailing commas:** Use in multiline objects/arrays
+
+### Import & Module Style
 ```typescript
-// ✅ Correct: Named imports from packages
-import { Hono } from "hono"
-import { prettyJSON } from "hono/pretty-json"
+// ✅ Named imports, single quotes, no semicolons
+import { Hono } from 'hono'
+import { prettyJSON } from 'hono/pretty-json'
+import * as k8s from '@kubernetes/client-node'
 
-// ✅ Use double quotes for strings
-const message = "Hello"
-
-// ✅ Type arrays explicitly
-const books: Array<{ title: string; author: string; isbn: string }> = []
+// ✅ Group imports: external packages first, then local modules
+import { metricsMiddleware } from './metrics/middleware'
 ```
 
-### Formatting
-- **Quotes:** Double quotes for strings
-- **Semicolons:** Optional (project doesn't enforce them consistently)
-- **Indentation:** 2 spaces
-- **Line length:** No strict limit but keep reasonable (~100 chars)
-- **Trailing commas:** Use in multiline objects/arrays
+### TypeScript Patterns
+```typescript
+// ✅ Explicit array types with inline objects
+const books: Array<{ title: string; author: string; isbn: string }> = []
+
+// ✅ Extract to type when reused or complex
+type Book = { title: string; author: string; isbn: string }
+
+// ✅ Use inference where obvious
+const app = new Hono()  // Type inferred
+
+// ✅ Strict mode enforced - no implicit any
+```
 
 ### Naming Conventions
 ```typescript
 // Variables & functions: camelCase
 const bookList = []
-function getBooks() {}
 
 // Types & interfaces: PascalCase
 type Book = { title: string }
-interface BookRepository {}
 
-// Constants: camelCase or UPPER_SNAKE_CASE for true constants
-const apiVersion = "1.0.0"
+// Constants: camelCase or UPPER_SNAKE_CASE
+const apiVersion = '1.0.0'
 const MAX_RETRIES = 3
 ```
 
-### Type Definitions
+### Error Handling & Hono Patterns
 ```typescript
-// ✅ Prefer explicit inline types for simple structures
-const books: Array<{ title: string; author: string }> = []
-
-// ✅ Extract to type/interface when reused
-type Book = {
-  title: string
-  author: string
-  isbn: string
-}
-
-// ✅ Use TypeScript inference where obvious
-const app = new Hono()  // Type inferred
-```
-
-### Error Handling
-```typescript
-// ✅ Return appropriate HTTP status codes
-app.post("/books", async (c) => {
+// ✅ Set status, handle errors gracefully
+app.post('/books', async (c) => {
   try {
-    // ... logic
     c.status(201)
-    return c.json({ message: "Created" })
+    return c.json({ message: 'Created' })
   } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error'
     c.status(500)
-    return c.json({ error: "Internal server error" })
+    return c.json({ error: 'Internal server error', message: errorMessage })
   }
 })
 
-// ✅ Validate input and return 400 for bad requests
-// ✅ Return 404 for not found resources
-// ✅ Return 401/403 for authentication/authorization errors
-```
-
-### Hono Patterns
-```typescript
-// ✅ Use c.json() for JSON responses
-app.get("/books", (c) => {
-  return c.json(books)
-})
-
-// ✅ Set status before returning
-app.post("/books", (c) => {
-  c.status(201)
+// ✅ Use c.json() and set status before returning
+app.get('/books', (c) => c.json(books))
+app.delete('/books/:id', (c) => {
+  c.status(204)
   return c.json({ success: true })
 })
 
-// ✅ Use middleware for cross-cutting concerns
+// ✅ Query params with defaults, middleware for cross-cutting concerns
+const page = parseInt(c.req.query('page') || '1')
 app.use(prettyJSON())
+app.use('*', tracingMiddleware)
+
+// Status codes: 200 OK, 201 Created, 400 Bad Request, 401 Unauthorized, 404 Not Found, 500 Error
 ```
 
 ## Git Commit Convention
 
 **CRITICAL:** This project uses [Conventional Commits](https://www.conventionalcommits.org/) with automated validation via Husky hooks.
 
-### Commit Format
-```
-<type>(<scope>): <subject>
+### Format: `<type>(<scope>): <subject>`
 
-[optional body]
+**Types that trigger releases:**
+- `feat`: New feature → MINOR version bump
+- `fix`: Bug fix → PATCH version bump
+- `perf`: Performance improvement → PATCH version bump
+- Add `!` after type for breaking changes (MAJOR bump): `feat!: redesign API`
 
-[optional footer]
-```
-
-### Commit Types
-
-**Generate releases:**
-- `feat`: New feature → MINOR version (1.x.0)
-- `fix`: Bug fix → PATCH version (1.0.x)
-- `perf`: Performance improvement → PATCH version
-
-**Do NOT generate releases:**
-- `docs`: Documentation changes
-- `style`: Code formatting (no logic change)
-- `refactor`: Code refactoring
-- `test`: Test additions/changes
-- `chore`: Maintenance tasks
-- `ci`: CI/CD changes
-- `build`: Build system changes
-- `revert`: Reverts a previous commit
+**Types that DON'T trigger releases:**
+- `docs`, `style`, `refactor`, `test`, `chore`, `ci`, `build`, `revert`
 
 ### Examples
 ```bash
@@ -184,61 +141,21 @@ app.use(prettyJSON())
 git commit -m "feat: add user authentication"
 git commit -m "fix: resolve memory leak in Docker container"
 git commit -m "docs: update API documentation"
-git commit -m "feat(api): add book search endpoint"
-
-# ✅ Breaking change (MAJOR version)
-git commit -m "feat!: redesign authentication API"
+git commit -m "feat!: redesign authentication API"  # Breaking change
 
 # ❌ Incorrect (will be rejected by Husky)
 git commit -m "Added new feature"
 git commit -m "fixed bug"
-git commit -m "Update docs"
 ```
 
-### Commit Rules (Enforced)
-- Type must be lowercase
-- Type cannot be empty
-- Subject cannot be empty
-- No period at end of subject
+### Rules (Enforced by commitlint)
+- Type must be lowercase and from allowed list
+- Subject cannot be empty or end with period
 - Header max 100 characters
-- Body must have blank line before it
-
-### Breaking Changes
-```bash
-# Option 1: Use ! after type
-feat!: change API response format
-
-# Option 2: Use BREAKING CHANGE in footer
-feat: change API response format
-
-BREAKING CHANGE: API now returns JSON instead of XML
-```
-
-## Project Structure
-
-```
-books-api/
-├── src/
-│   └── index.ts           # Main application entry point
-├── init-db/
-│   └── 01-init.sql        # Database schema & seed data
-├── helm/                  # Kubernetes Helm charts
-├── gitops/                # ArgoCD deployment configs
-├── .github/
-│   └── workflows/         # CI/CD pipelines
-├── .husky/                # Git hooks (commit validation)
-├── docker-compose.yml     # Dev stack definition
-├── Dockerfile             # Production image
-└── Dockerfile.dev         # Development image
-```
 
 ## Environment Variables
 
-See `.env.example` for all available variables:
-- `NODE_ENV`: development/production
-- `PORT`: Server port (default: 3000)
-- `DATABASE_URL`: PostgreSQL connection string
-- `REDIS_URL`: Redis connection string
+See `.env.example`: `NODE_ENV`, `PORT` (default: 3000), `DATABASE_URL`, `REDIS_URL`
 
 ## Important Notes for Agents
 
@@ -258,3 +175,5 @@ See `.env.example` for all available variables:
 - See `CONTRIBUTING.md` for detailed contribution guidelines
 - See `DEPLOYMENT.md` for deployment instructions
 - See `GITOPS.md` for GitOps workflow details
+
+

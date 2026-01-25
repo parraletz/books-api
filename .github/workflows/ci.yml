@@ -328,3 +328,141 @@ jobs:
         run: |
           echo "::error::Pipeline failed due to critical vulnerabilities. Please fix them before merging."
           exit 1
+
+  helm-kyverno-validation:
+    name: Helm Template & Kyverno Validation
+    runs-on: ubuntu-latest
+    needs: test
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Setup Helm
+        uses: azure/setup-helm@v3
+        with:
+          version: v3.12.0
+      
+      - name: Install yq (YAML processor)
+        run: |
+          sudo wget -qO /usr/local/bin/yq https://github.com/mikefarah/yq/releases/download/v4.35.2/yq_linux_amd64
+          sudo chmod +x /usr/local/bin/yq
+          yq --version
+      
+      - name: Install Kyverno CLI
+        run: |
+          curl -sSfL https://github.com/kyverno/kyverno/releases/download/v1.11.0/kyverno-cli_v1.11.0_linux_x86_64.tar.gz -o kyverno.tar.gz
+          tar -xzf kyverno.tar.gz
+          sudo mv kyverno /usr/local/bin/
+          kyverno version
+      
+      - name: Extract ArgoCD valuesObject
+        id: extract-values
+        run: |
+          # Determine environment based on branch
+          if [[ "${{ github.ref_name }}" == "main" ]]; then
+            ENV="production"
+          else
+            ENV="staging"
+          fi
+          
+          echo "Environment: $ENV"
+          
+          # Extract valuesObject from ArgoCD config
+          if [ -f "gitops/books.yaml" ]; then
+            yq eval '.spec.source.helm.valuesObject' gitops/books.yaml > temp-values.yaml
+            echo "✅ Extracted valuesObject from ArgoCD config"
+          else
+            echo "❌ ArgoCD config not found"
+            exit 1
+          fi
+          
+          # Merge with environment-specific values if exists
+          if [ -f "gitops/values-$ENV.yaml" ]; then
+            yq eval-all 'select(fileIndex == 0) * select(fileIndex == 1)' \
+              temp-values.yaml gitops/values-$ENV.yaml > merged-values.yaml
+            mv merged-values.yaml temp-values.yaml
+            echo "✅ Merged with $ENV values"
+          fi
+          
+          # Display final values
+          echo "Final values to be used:"
+          cat temp-values.yaml
+          
+          echo "env=$ENV" >> $GITHUB_OUTPUT
+      
+      - name: Validate Helm chart syntax
+        run: |
+          echo "🔍 Validating Helm chart syntax..."
+          helm lint ./helm/books-api --values temp-values.yaml
+      
+      - name: Render Helm templates
+        run: |
+          echo "📋 Rendering Helm templates..."
+          helm template books-api ./helm/books-api \
+            --values temp-values.yaml \
+            --output-dir rendered-manifests \
+            --debug
+          
+          echo "✅ Templates rendered to rendered-manifests/"
+          echo "Generated files:"
+          find rendered-manifests -name "*.yaml" -type f | head -10
+      
+      - name: Validate with Kyverno CLI
+        run: |
+          echo "🛡️ Validating with Kyverno policies..."
+          
+          # Apply Kyverno validation if policies exist
+          if [ -d "gitops/kyverno-policies" ] && [ "$(ls -A gitops/kyverno-policies/*.yaml 2>/dev/null)" ]; then
+            kyverno apply gitops/kyverno-policies/ \
+              --resource rendered-manifests/books-api/templates/ \
+              --detailed-results
+            echo "✅ Kyverno validation passed"
+          else
+            echo "⚠️ No Kyverno policies found, skipping validation"
+          fi
+      
+      - name: Generate validation report
+        if: always()
+        run: |
+          echo "## 📊 Helm & Kyverno Validation Report" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Environment:** ${{ steps.extract-values.outputs.env }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Helm Chart:** books-api" >> $GITHUB_STEP_SUMMARY
+          echo "**Branch:** \`${{ github.ref_name }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          if [ -d "rendered-manifests/books-api/templates" ]; then
+            MANIFEST_COUNT=$(find rendered-manifests/books-api/templates -name "*.yaml" -type f | wc -l)
+            echo "**Manifests Generated:** $MANIFEST_COUNT" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          if [ -d "gitops/kyverno-policies" ] && [ "$(ls -A gitops/kyverno-policies/*.yaml 2>/dev/null)" ]; then
+            POLICY_COUNT=$(find gitops/kyverno-policies -name "*.yaml" -type f | wc -l)
+            echo "**Kyverno Policies Applied:** $POLICY_COUNT" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "**Kyverno Policies Applied:** None configured" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 📁 Generated Manifests" >> $GITHUB_STEP_SUMMARY
+          if [ -d "rendered-manifests/books-api/templates" ]; then
+            find rendered-manifests/books-api/templates -name "*.yaml" -type f | \
+              sed 's|rendered-manifests/books-api/templates/|- |' >> $GITHUB_STEP_SUMMARY
+          fi
+      
+      - name: Upload validation artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: helm-validation-${{ steps.extract-values.outputs.env }}
+          path: |
+            rendered-manifests/
+            temp-values.yaml
+          retention-days: 7
+      
+      - name: Cleanup temp files
+        if: always()
+        run: |
+          rm -f temp-values.yaml merged-values.yaml
+          rm -rf rendered-manifests

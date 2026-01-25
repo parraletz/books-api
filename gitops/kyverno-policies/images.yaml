@@ -1,0 +1,97 @@
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: image-security
+  namespace: ""
+  annotations:
+    policies.kyverno.io/title: Container Image Security
+    policies.kyverno.io/category: Security
+    policies.kyverno.io/subject: Pod, Deployment, StatefulSet, DaemonSet
+    policies.kyverno.io/description: >-
+      Enforces secure container image practices including trusted registries,
+      image tags, and pull policies.
+spec:
+  validationFailureAction: Enforce
+  background: true
+  rules:
+    - name: require-trusted-registry
+      match:
+        any:
+          - resources:
+              kinds:
+                - Pod
+                - Deployment
+                - StatefulSet
+                - DaemonSet
+              namespaces:
+                - books-api
+      validate:
+        message: "Only images from trusted registries are allowed (ghcr.io, docker.io, k8s.gcr.io, gcr.io, quay.io)"
+        pattern:
+          spec:
+            template:
+              spec:
+                containers:
+                  - image: "ghcr.io/* | docker.io/* | k8s.gcr.io/* | gcr.io/* | quay.io/*"
+    
+    - name: require-specific-tag
+      match:
+        any:
+          - resources:
+              kinds:
+                - Pod
+                - Deployment
+                - StatefulSet
+                - DaemonSet
+              namespaces:
+                - books-api
+      validate:
+        message: "Container images must use a specific tag (not 'latest')"
+        pattern:
+          spec:
+            template:
+              spec:
+                containers:
+                  - image: "!*:latest"
+    
+    - name: require-image-pull-policy
+      match:
+        any:
+          - resources:
+              kinds:
+                - Pod
+                - Deployment
+                - StatefulSet
+                - DaemonSet
+              namespaces:
+                - books-api
+      validate:
+        message: "Image pull policy must be set to IfNotPresent or Always"
+        pattern:
+          spec:
+            template:
+              spec:
+                containers:
+                  - imagePullPolicy: "IfNotPresent | Always"
+    
+    - name: validate-books-api-image
+      match:
+        any:
+          - resources:
+              kinds:
+                - Pod
+                - Deployment
+                - StatefulSet
+                - DaemonSet
+              selector:
+                matchLabels:
+                  app.kubernetes.io/name: books-api
+      validate:
+        message: "books-api must use ghcr.io/parraletz/books-api image"
+        pattern:
+          spec:
+            template:
+              spec:
+                containers:
+                  - name: "books-api"
+                    image: "ghcr.io/parraletz/books-api:*"

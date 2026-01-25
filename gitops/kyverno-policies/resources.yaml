@@ -1,0 +1,128 @@
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: resource-limits
+  namespace: ""
+  annotations:
+    policies.kyverno.io/title: Resource Limits and Requests
+    policies.kyverno.io/category: Resources
+    policies.kyverno.io/subject: Pod, Deployment, StatefulSet, DaemonSet
+    policies.kyverno.io/description: >-
+      Ensures all containers have resource limits and requests defined to prevent
+      resource exhaustion and ensure fair resource allocation.
+spec:
+  validationFailureAction: Enforce
+  background: true
+  rules:
+    - name: require-resource-requests
+      match:
+        any:
+          - resources:
+              kinds:
+                - Pod
+                - Deployment
+                - StatefulSet
+                - DaemonSet
+              namespaces:
+                - books-api
+      validate:
+        message: "CPU and memory requests are required for all containers"
+        pattern:
+          spec:
+            template:
+              spec:
+                containers:
+                  - resources:
+                      requests:
+                        cpu: "?*"
+                        memory: "?*"
+    
+    - name: require-resource-limits
+      match:
+        any:
+          - resources:
+              kinds:
+                - Pod
+                - Deployment
+                - StatefulSet
+                - DaemonSet
+              namespaces:
+                - books-api
+      validate:
+        message: "CPU and memory limits are required for all containers"
+        pattern:
+          spec:
+            template:
+              spec:
+                containers:
+                  - resources:
+                      limits:
+                        cpu: "?*"
+                        memory: "?*"
+    
+    - name: validate-cpu-limits
+      match:
+        any:
+          - resources:
+              kinds:
+                - Pod
+                - Deployment
+                - StatefulSet
+                - DaemonSet
+              namespaces:
+                - books-api
+      validate:
+        message: "CPU limit should not exceed 1000m and should be >= 50m"
+        pattern:
+          spec:
+            template:
+              spec:
+                containers:
+                  - resources:
+                      limits:
+                        cpu: ">50m && <1000m"
+    
+    - name: validate-memory-limits
+      match:
+        any:
+          - resources:
+              kinds:
+                - Pod
+                - Deployment
+                - StatefulSet
+                - DaemonSet
+              namespaces:
+                - books-api
+      validate:
+        message: "Memory limit should not exceed 1Gi and should be >= 64Mi"
+        pattern:
+          spec:
+            template:
+              spec:
+                containers:
+                  - resources:
+                      limits:
+                        memory: ">64Mi && <1Gi"
+    
+    - name: validate-requests-limits-ratio
+      match:
+        any:
+          - resources:
+              kinds:
+                - Pod
+                - Deployment
+                - StatefulSet
+                - DaemonSet
+              namespaces:
+                - books-api
+      validate:
+        message: "Resource requests should not exceed limits by more than 2x"
+        pattern:
+          spec:
+            template:
+              spec:
+                containers:
+                  - resources:
+                      =(requests):
+                        cpu: "<=(limits.cpu)*2"
+                        memory: "<=(limits.memory)*2"

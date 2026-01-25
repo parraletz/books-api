@@ -1,0 +1,102 @@
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: networking-policies
+  namespace: ""
+  annotations:
+    policies.kyverno.io/title: Network Security Policies
+    policies.kyverno.io/category: Network
+    policies.kyverno.io/subject: Service, Ingress, Pod, Deployment
+    policies.kyverno.io/description: >-
+      Enforces secure networking practices including TLS for ingresses,
+      proper service configurations, and network restrictions.
+spec:
+  validationFailureAction: Enforce
+  background: true
+  rules:
+    - name: require-tls-ingress
+      match:
+        any:
+          - resources:
+              kinds:
+                - Ingress
+              namespaces:
+                - books-api
+      validate:
+        message: "Ingress must have TLS configured"
+        pattern:
+          spec:
+            tls:
+              - hosts: ["?*"]
+                secretName: "?*"
+    
+    - name: require-cert-manager-annotation
+      match:
+        any:
+          - resources:
+              kinds:
+                - Ingress
+              namespaces:
+                - books-api
+      validate:
+        message: "Ingress should have cert-manager cluster-issuer annotation"
+        anyPattern:
+          - metadata:
+              annotations:
+                cert-manager.io/cluster-issuer: "?*"
+          - metadata:
+              annotations:
+                cert-manager.io/cluster-issuer: "?*"
+    
+    - name: validate-service-type
+      match:
+        any:
+          - resources:
+              kinds:
+                - Service
+              namespaces:
+                - books-api
+      validate:
+        message: "Service type must be ClusterIP for internal services"
+        pattern:
+          spec:
+            type: "ClusterIP"
+    
+    - name: require-health-checks
+      match:
+        any:
+          - resources:
+              kinds:
+                - Deployment
+                - StatefulSet
+              namespaces:
+                - books-api
+      validate:
+        message: "Deployments must have both liveness and readiness probes"
+        pattern:
+          spec:
+            template:
+              spec:
+                containers:
+                  - livenessProbe:
+                      httpGet:
+                        path: "?*"
+                        port: "?*"
+                  - readinessProbe:
+                      httpGet:
+                        path: "?*"
+                        port: "?*"
+    
+    - name: validate-ingress-class
+      match:
+        any:
+          - resources:
+              kinds:
+                - Ingress
+              namespaces:
+                - books-api
+      validate:
+        message: "Ingress must specify a class"
+        pattern:
+          spec:
+            ingressClassName: "?*"

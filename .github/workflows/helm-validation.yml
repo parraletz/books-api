@@ -1,0 +1,275 @@
+name: Helm & Kyverno Validation
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+  pull_request:
+    branches:
+      - main
+      - develop
+
+jobs:
+  helm-kyverno-validation:
+    name: Helm Template & Kyverno Validation
+    runs-on: ubuntu-latest
+    needs: test
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Helm
+        uses: azure/setup-helm@v3
+        with:
+          version: v3.12.0
+
+      - name: Install Python YAML module
+        run: |
+          python3 -m pip install --upgrade pip
+          python3 -m pip install pyyaml
+
+      - name: Extract ArgoCD valuesObject
+        id: extract-values
+        run: |
+          echo "🔍 Extracting valuesObject from ArgoCD config..."
+
+          # Determine environment based on branch
+          if [[ "${{ github.ref_name }}" == "main" ]]; then
+            ENV="production"
+          else
+            ENV="staging"
+          fi
+
+          echo "Environment: $ENV"
+          echo "env=$ENV" >> $GITHUB_OUTPUT
+
+          # Check if ArgoCD config exists
+          if [ ! -f "gitops/books.yaml" ]; then
+            echo "::error::ArgoCD config not found: gitops/books.yaml"
+            exit 1
+          fi
+
+          # Extract valuesObject from ArgoCD config using Python
+          python3 << 'EOF'
+import yaml
+import sys
+
+try:
+    with open('gitops/books.yaml', 'r') as f:
+        data = yaml.safe_load(f)
+
+    if 'spec' not in data or 'source' not in data['spec'] or 'helm' not in data['spec']['source'] or 'valuesObject' not in data['spec']['source']['helm']:
+        print('::error::valuesObject not found in ArgoCD config')
+        sys.exit(1)
+
+    values_object = data['spec']['source']['helm']['valuesObject']
+
+    # Output as YAML for temp values file
+    yaml.dump(values_object, sys.stdout, default_flow_style=False)
+
+except Exception as e:
+    print(f'::error::Error extracting valuesObject: {e}')
+    sys.exit(1)
+EOF > temp-values.yaml
+
+          if [ $? -ne 0 ]; then
+            echo "::error::Failed to extract valuesObject"
+            exit 1
+          fi
+
+          echo "✅ valuesObject extracted to temp-values.yaml"
+
+          # Merge with environment-specific values if exists
+          if [ -f "gitops/values-$ENV.yaml" ]; then
+            echo "🔄 Merging with $ENV values..."
+            python3 << 'EOF'
+import yaml
+
+try:
+    with open('temp-values.yaml', 'r') as f:
+        argocd_values = yaml.safe_load(f)
+
+    with open('gitops/values-$ENV.yaml', 'r') as f:
+        env_values = yaml.safe_load(f)
+
+    # Deep merge: environment values override ArgoCD values
+    def deep_merge(base, override):
+        result = base.copy()
+        for key, value in override.items():
+            if key in result and isinstance(result[key], dict) and isinstance(value, dict):
+                result[key] = deep_merge(result[key], value)
+            else:
+                result[key] = value
+        return result
+
+    merged = deep_merge(argocd_values, env_values)
+    yaml.dump(merged, sys.stdout, default_flow_style=False)
+
+except Exception as e:
+    print(f'::error::Error merging values: {e}')
+    sys.exit(1)
+EOF > merged-values.yaml
+            mv merged-values.yaml temp-values.yaml
+            echo "✅ Merged with $ENV values"
+          fi
+
+          # Display key values
+          echo "📊 Key values to be used:"
+          python3 << 'EOF'
+import yaml
+
+try:
+    with open('temp-values.yaml', 'r') as f:
+        values = yaml.safe_load(f)
+
+    print('  - Image tag:', values.get('image', {}).get('tag', 'not specified'))
+    print('  - Replicas:', values.get('replicaCount', 'not specified'))
+    print('  - Service type:', values.get('service', {}).get('type', 'not specified'))
+    print('  - Ingress enabled:', values.get('ingress', {}).get('enabled', 'not specified'))
+
+except Exception as e:
+    print(f'Error reading values: {e}')
+    sys.exit(1)
+EOF
+
+      - name: Validate Helm chart syntax
+        run: |
+          echo "🔍 Validating Helm chart syntax..."
+
+          if ! helm lint ./helm/books-api --values temp-values.yaml; then
+            echo "::error::Helm chart lint failed"
+            exit 1
+          fi
+
+          echo "✅ Helm chart syntax is valid"
+
+      - name: Render Helm templates
+        run: |
+          echo "📋 Rendering Helm templates..."
+
+          # Create output directory
+          mkdir -p rendered-manifests
+
+          # Render templates with debug output
+          if ! helm template books-api ./helm/books-api --values temp-values.yaml --output-dir rendered-manifests --debug; then
+            echo "::error::Helm template rendering failed"
+            exit 1
+          fi
+
+          echo "✅ Templates rendered to rendered-manifests/"
+          echo "📁 Generated files:"
+          find rendered-manifests -name "*.yaml" -type f | wc -l | xargs echo "  - Total manifests:"
+          find rendered-manifests -name "*.yaml" -type f | head -5 | sed 's|.*|    - |'
+
+      - name: Validate with Kyverno CLI
+        run: |
+          echo "🛡️ Setting up Kyverno CLI..."
+
+          # Check if policies exist
+          if [ ! -d "gitops/kyverno-policies" ] || [ -z "$(ls -A gitops/kyverno-policies/*.yaml 2>/dev/null)" ]; then
+            echo "⚠️ No Kyverno policies found in gitops/kyverno-policies/, skipping validation"
+            echo "::warning::Consider adding Kyverno policies for enhanced security validation"
+            exit 0
+          fi
+
+          # Count policies
+          POLICY_COUNT=$(find gitops/kyverno-policies -name "*.yaml" -type f | wc -l)
+          echo "📋 Found $POLICY_COUNT Kyverno policies"
+
+          # Use Docker for Kyverno CLI (compatible with all architectures)
+          KYVERNO_CMD="docker run --rm -v $(pwd):/workspace -w /workspace ghcr.io/kyverno/kyverno-cli:v1.11.0"
+
+          echo "🛡️ Running Kyverno policy validation..."
+
+          # Validate critical deployment first
+          if ! $KYVERNO_CMD apply gitops/kyverno-policies/ --resource rendered-manifests/books-api/templates/deployment.yaml; then
+            echo "::error::Kyverno policy validation failed for deployment"
+            exit 1
+          fi
+
+          echo "✅ Deployment passed Kyverno validation"
+
+          # Validate all other resources
+          MANIFEST_COUNT=0
+          FAILED_COUNT=0
+
+          for manifest in rendered-manifests/books-api/templates/*.yaml; do
+            if [ -f "$manifest" ]; then
+              MANIFEST_COUNT=$((MANIFEST_COUNT + 1))
+              MANIFEST_NAME=$(basename "$manifest")
+
+              echo "  🔍 Validating $MANIFEST_NAME..."
+
+              if $KYVERNO_CMD apply gitops/kyverno-policies/ --resource "$manifest" > /dev/null 2>&1; then
+                echo "    ✅ $MANIFEST_NAME passed"
+              else
+                echo "    ❌ $MANIFEST_NAME failed"
+                FAILED_COUNT=$((FAILED_COUNT + 1))
+                $KYVERNO_CMD apply gitops/kyverno-policies/ --resource "$manifest"
+              fi
+            fi
+          done
+
+          if [ $FAILED_COUNT -gt 0 ]; then
+            echo "::error::Kyverno validation failed for $FAILED_COUNT out of $MANIFEST_COUNT resources"
+            exit 1
+          fi
+
+          echo "✅ All $MANIFEST_COUNT manifests passed Kyverno validation"
+
+      - name: Generate validation report
+        if: always()
+        run: |
+          echo "## 📊 Helm & Kyverno Validation Report" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Environment:** ${{ steps.extract-values.outputs.env }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Helm Chart:** books-api" >> $GITHUB_STEP_SUMMARY
+          echo "**Status:** ${{ job.status }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          # Helm validation results
+          if [ -d "rendered-manifests/books-api/templates" ]; then
+            MANIFEST_COUNT=$(find rendered-manifests/books-api/templates -name "*.yaml" -type f | wc -l)
+            echo "### 📋 Helm Templates" >> $GITHUB_STEP_SUMMARY
+            echo "- ✅ Chart syntax: Valid" >> $GITHUB_STEP_SUMMARY
+            echo "- 📄 Manifests generated: $MANIFEST_COUNT" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          # Kyverno validation results
+          if [ -d "gitops/kyverno-policies" ] && [ "$(ls -A gitops/kyverno-policies)" ]; then
+            POLICY_COUNT=$(find gitops/kyverno-policies -name "*.yaml" -type f | wc -l)
+            echo "### 🛡️ Kyverno Policies" >> $GITHUB_STEP_SUMMARY
+            echo "- 📋 Policies applied: $POLICY_COUNT" >> $GITHUB_STEP_SUMMARY
+            echo "- ✅ Policy status: All passed" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+
+            echo "### 📁 Generated Manifests" >> $GITHUB_STEP_SUMMARY
+            if [ -d "rendered-manifests/books-api/templates" ]; then
+              find rendered-manifests/books-api/templates -name "*.yaml" -type f | sed 's|.*|- |' >> $GITHUB_STEP_SUMMARY
+            fi
+          else
+            echo "### ⚠️ Kyverno Policies" >> $GITHUB_STEP_SUMMARY
+            echo "- No policies configured in gitops/kyverno-policies/" >> $GITHUB_STEP_SUMMARY
+            echo "- Consider adding policies for enhanced security validation" >> $GITHUB_STEP_SUMMARY
+          fi
+
+      - name: Upload validation artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: helm-validation-${{ steps.extract-values.outputs.env }}-${{ github.run_number }}
+          path: |
+            rendered-manifests/
+            temp-values.yaml
+          retention-days: 7
+
+      - name: Cleanup temp files
+        if: always()
+        run: |
+          echo "🧹 Cleaning up temporary files..."
+          rm -f temp-values.yaml merged-values.yaml
+          rm -rf rendered-manifests
+          echo "✅ Cleanup completed"

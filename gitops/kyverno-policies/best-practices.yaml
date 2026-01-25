@@ -1,0 +1,130 @@
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: best-practices
+  namespace: ""
+  annotations:
+    policies.kyverno.io/title: Kubernetes Best Practices
+    policies.kyverno.io/category: Best Practices
+    policies.kyverno.io/subject: Pod, Deployment, Service, ConfigMap, Secret
+    policies.kyverno.io/description: >-
+      Enforces general Kubernetes best practices including labels,
+      annotations, namespace isolation, and proper naming conventions.
+spec:
+  validationFailureAction: Enforce
+  background: true
+  rules:
+    - name: require-standard-labels
+      match:
+        any:
+          - resources:
+              kinds:
+                - Deployment
+                - StatefulSet
+                - DaemonSet
+                - Service
+              namespaces:
+                - books-api
+      validate:
+        message: "Resources must have standard Kubernetes labels"
+        pattern:
+          metadata:
+            labels:
+              app.kubernetes.io/name: "?*"
+              app.kubernetes.io/instance: "?*"
+              app.kubernetes.io/managed-by: "?*"
+    
+    - name: require-replica-count
+      match:
+        any:
+          - resources:
+              kinds:
+                - Deployment
+                - StatefulSet
+              namespaces:
+                - books-api
+      validate:
+        message: "Deployments must specify replica count"
+        pattern:
+          spec:
+            replicas: ">0"
+    
+    - name: require-serviceaccount
+      match:
+        any:
+          - resources:
+              kinds:
+                - Deployment
+                - StatefulSet
+                - DaemonSet
+              namespaces:
+                - books-api
+      validate:
+        message: "Workloads must specify a serviceAccountName"
+        pattern:
+          spec:
+            template:
+              spec:
+                serviceAccountName: "?*"
+    
+    - name: block-sensitive-data-in-configmaps
+      match:
+        any:
+          - resources:
+              kinds:
+                - ConfigMap
+              namespaces:
+                - books-api
+      validate:
+        message: "ConfigMaps should not contain sensitive data patterns"
+        anyPattern:
+          - data:
+              =(password): "!*"
+              =(secret): "!*"
+              =(token): "!*"
+              =(key): "!*"
+              =(credential): "!*"
+          - data:
+              =(PASSWORD): "!*"
+              =(SECRET): "!*"
+              =(TOKEN): "!*"
+              =(KEY): "!*"
+              =(CREDENTIAL): "!*"
+    
+    - name: require-termination-grace-period
+      match:
+        any:
+          - resources:
+              kinds:
+                - Pod
+                - Deployment
+                - StatefulSet
+                - DaemonSet
+              namespaces:
+                - books-api
+      validate:
+        message: "Pods should have a termination grace period set"
+        pattern:
+          spec:
+            template:
+              spec:
+                terminationGracePeriodSeconds: ">0"
+    
+    - name: require-dns-policy
+      match:
+        any:
+          - resources:
+              kinds:
+                - Pod
+                - Deployment
+                - StatefulSet
+                - DaemonSet
+              namespaces:
+                - books-api
+      validate:
+        message: "Pods should have DNS policy set"
+        pattern:
+          spec:
+            template:
+              spec:
+                dnsPolicy: "ClusterFirst | ClusterFirstWithHostNet | Default | None"

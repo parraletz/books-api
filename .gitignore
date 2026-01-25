@@ -142,4 +142,7 @@ dist
 .svelte-kit
 __pycache__/
 
+*.tar.gz
+*.zip
+
 # End of https://www.toptal.com/developers/gitignore/api/node
