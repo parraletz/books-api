@@ -7,17 +7,17 @@ replicaCount: 2
 image:
   repository: ghcr.io/parraletz/books-api
   pullPolicy: IfNotPresent
-  tag: "" # Overrides the image tag whose default is the chart appVersion
+  tag: '' # Overrides the image tag whose default is the chart appVersion
 
 imagePullSecrets: []
-nameOverride: ""
-fullnameOverride: ""
+nameOverride: ''
+fullnameOverride: ''
 
 serviceAccount:
   create: true
   automount: true
   annotations: {}
-  name: ""
+  name: ''
 
 # RBAC configuration for Kubernetes API access
 # Required for the /pods endpoint to list pods in the namespace
@@ -27,9 +27,9 @@ rbac:
   # Rules define what the ServiceAccount can access
   # Default: read-only access to pods in the namespace
   rules:
-    - apiGroups: [""]
-      resources: ["pods"]
-      verbs: ["get", "list", "watch"]
+    - apiGroups: ['']
+      resources: ['pods']
+      verbs: ['get', 'list', 'watch']
 
 podAnnotations: {}
 podLabels: {}
@@ -56,7 +56,7 @@ service:
 
 ingress:
   enabled: false
-  className: "nginx"
+  className: 'nginx'
   annotations: {}
     # cert-manager.io/cluster-issuer: "letsencrypt-prod"
     # nginx.ingress.kubernetes.io/ssl-redirect: "true"
@@ -108,28 +108,28 @@ scaleObject:
   enabled: false
   minReplicaCount: 2
   maxReplicaCount: 10
-  cooldownPeriod: 300  # Cooldown period in seconds before scaling to zero
-  pollingInterval: 30  # How often KEDA checks metrics (seconds)
-  restoreToOriginalReplicaCount: false  # Restore replicas when ScaledObject is deleted
+  cooldownPeriod: 300 # Cooldown period in seconds before scaling to zero
+  pollingInterval: 30 # How often KEDA checks metrics (seconds)
+  restoreToOriginalReplicaCount: false # Restore replicas when ScaledObject is deleted
   # HTTP scaling configuration (requires HTTPScaledObject to exist for interceptor routing)
   http:
     enabled: false
-    scalerAddress: "keda-add-ons-http-external-scaler.keda:9090"
+    scalerAddress: 'keda-add-ons-http-external-scaler.keda:9090'
   # CPU/Memory scaling
   targetCPUUtilizationPercentage: 80
   targetMemoryUtilizationPercentage: 80
   # Scale down behavior - prevents aggressive scale down
   scaleDown:
-    stabilizationWindowSeconds: 300  # Wait 5 minutes before scaling down
-    percentPolicy: 10   # Scale down max 10% of pods per period
-    podsPolicy: 1       # Scale down max 1 pod per period
-    periodSeconds: 60   # Period for scale down policies
+    stabilizationWindowSeconds: 300 # Wait 5 minutes before scaling down
+    percentPolicy: 10 # Scale down max 10% of pods per period
+    podsPolicy: 1 # Scale down max 1 pod per period
+    periodSeconds: 60 # Period for scale down policies
   # Scale up behavior - allows quick scale up
   scaleUp:
-    stabilizationWindowSeconds: 0  # Scale up immediately
-    percentPolicy: 100  # Scale up max 100% of pods per period
-    podsPolicy: 4       # Scale up max 4 pods per period
-    periodSeconds: 15   # Period for scale up policies
+    stabilizationWindowSeconds: 0 # Scale up immediately
+    percentPolicy: 100 # Scale up max 100% of pods per period
+    podsPolicy: 4 # Scale up max 4 pods per period
+    periodSeconds: 15 # Period for scale up policies
 
 autoscaling:
   enabled: false
@@ -146,41 +146,41 @@ httpScaledObject:
   # Target service configuration (usually your app service)
   scaleTargetRef:
     # Deployment name (defaults to chart fullname)
-    name: ""
+    name: ''
     # Service name (defaults to chart fullname)
-    service: ""
+    service: ''
     # Service port (defaults to service.port)
     port: 80
   # Replica configuration
   replicas:
-    min: 0  # Can scale to zero
+    min: 0 # Can scale to zero
     max: 10
   # HTTP scaling configuration
   scalingMetric:
     # Scale based on request rate (requests per second)
     requestRate:
-      targetValue: 100  # Target 100 requests/sec per replica
-      window: "1m"      # Time window for rate calculation
-      granularity: "1s" # Time granularity for rate calculation
+      targetValue: 100 # Target 100 requests/sec per replica
+      window: '1m' # Time window for rate calculation
+      granularity: '1s' # Time granularity for rate calculation
     # Or scale based on concurrent requests (uncomment to use instead)
     # concurrency:
     #   targetValue: 100  # Target 100 concurrent requests per replica
   # Target pending requests before scaling up
   targetPendingRequests: 100
   # Cooldown period configuration
-  cooldownPeriod: 300  # Seconds to wait before scaling down to zero
+  cooldownPeriod: 300 # Seconds to wait before scaling down to zero
   # KEDA HTTP Add-on interceptor configuration
   interceptor:
     # Namespace where KEDA HTTP Add-on is installed
-    namespace: "keda"
+    namespace: 'keda'
     # Interceptor service name
-    service: "keda-add-ons-http-interceptor-proxy"
+    service: 'keda-add-ons-http-interceptor-proxy'
     # Interceptor service port
     port: 8080
     # Target host for routing (defaults to service FQDN)
     # This header tells the interceptor which service to forward requests to
     # Important: Required when using external domains through Istio Gateway
-    targetHost: ""  # Default: <service-name>.<namespace>.svc.cluster.local
+    targetHost: '' # Default: <service-name>.<namespace>.svc.cluster.local
     # Preserve original Host header
     # If true, keeps the external domain in Host header
     # If false, replaces Host header with internal service name
@@ -207,20 +207,20 @@ affinity: {}
 prometheus:
   enabled: true
   path: /metrics
-  port: "3000"
+  port: '3000'
   # ServiceMonitor for Prometheus Operator
   serviceMonitor:
     enabled: false
     # Namespace where the ServiceMonitor will be created (defaults to release namespace)
-    namespace: ""
+    namespace: ''
     # Additional labels for ServiceMonitor discovery by Prometheus
     labels: {}
     # Annotations for the ServiceMonitor
     annotations: {}
     # Scrape interval (e.g., "30s", "1m")
-    interval: "30s"
+    interval: '30s'
     # Scrape timeout (must be less than interval)
-    scrapeTimeout: "10s"
+    scrapeTimeout: '10s'
     # Honor labels from the target
     honorLabels: false
     # Metric relabeling rules
@@ -231,7 +231,7 @@ prometheus:
   alerts:
     enabled: false
     # Namespace where the PrometheusRule will be created (defaults to release namespace)
-    namespace: ""
+    namespace: ''
     # Additional labels for PrometheusRule discovery by Prometheus
     labels: {}
     # Annotations for the PrometheusRule
@@ -241,50 +241,50 @@ prometheus:
       # High error rate (5xx responses)
       highErrorRate:
         enabled: true
-        threshold: 5  # Percentage of 5xx errors
-        for: "5m"
-        severity: "critical"
-        runbookUrl: ""
+        threshold: 5 # Percentage of 5xx errors
+        for: '5m'
+        severity: 'critical'
+        runbookUrl: ''
       # High latency (P95)
       highLatency:
         enabled: true
-        threshold: 1  # Seconds
-        for: "5m"
-        severity: "warning"
-        runbookUrl: ""
+        threshold: 1 # Seconds
+        for: '5m'
+        severity: 'warning'
+        runbookUrl: ''
       # Pod not ready
       podNotReady:
         enabled: true
-        for: "5m"
-        severity: "warning"
-        runbookUrl: ""
+        for: '5m'
+        severity: 'warning'
+        runbookUrl: ''
       # High CPU usage
       highCpuUsage:
         enabled: true
-        threshold: 80  # Percentage
-        for: "10m"
-        severity: "warning"
-        runbookUrl: ""
+        threshold: 80 # Percentage
+        for: '10m'
+        severity: 'warning'
+        runbookUrl: ''
       # High memory usage
       highMemoryUsage:
         enabled: true
-        threshold: 80  # Percentage
-        for: "10m"
-        severity: "warning"
-        runbookUrl: ""
+        threshold: 80 # Percentage
+        for: '10m'
+        severity: 'warning'
+        runbookUrl: ''
       # Pod restarting too often
       podRestarting:
         enabled: true
-        threshold: 3  # Restarts in last hour
-        for: "5m"
-        severity: "warning"
-        runbookUrl: ""
+        threshold: 3 # Restarts in last hour
+        for: '5m'
+        severity: 'warning'
+        runbookUrl: ''
       # No pods running
       noPodsRunning:
         enabled: true
-        for: "1m"
-        severity: "critical"
-        runbookUrl: ""
+        for: '1m'
+        severity: 'critical'
+        runbookUrl: ''
     # Custom alerting rules (raw PrometheusRule format)
     customRules: []
     # - alert: CustomAlert
@@ -298,22 +298,22 @@ prometheus:
 
 opentelemetry:
   enabled: false
-  endpoint: "http://otel-collector:4318"
-  serviceName: "books-api"
+  endpoint: 'http://otel-collector:4318'
+  serviceName: 'books-api'
   debug: false
 
 grafana:
   dashboards:
     enabled: false
     labels:
-      grafana_dashboard: "1"
+      grafana_dashboard: '1'
     annotations: {}
 
 env:
   - name: NODE_ENV
-    value: "production"
+    value: 'production'
   - name: PORT
-    value: "3000"
+    value: '3000'
   # OpenTelemetry environment variables (controlled by opentelemetry.enabled)
   # - name: OTEL_ENABLED
   #   value: "true"

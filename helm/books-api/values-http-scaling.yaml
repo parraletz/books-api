@@ -2,12 +2,12 @@
 # This configuration enables HTTP-based autoscaling with scale-to-zero capability
 
 # Disable default replica count (HTTPScaledObject will manage replicas)
-replicaCount: 2  # Only used if httpScaledObject, autoscaling, and scaleObject are all disabled
+replicaCount: 2 # Only used if httpScaledObject, autoscaling, and scaleObject are all disabled
 
 image:
   repository: ghcr.io/parraletz/books-api
   pullPolicy: IfNotPresent
-  tag: "1.0.0"
+  tag: '1.0.0'
 
 # Service configuration
 service:
@@ -32,48 +32,48 @@ scaleObject:
 # Enable KEDA HTTP Add-on for HTTP-based autoscaling
 httpScaledObject:
   enabled: true
-  
+
   # Target deployment and service
   scaleTargetRef:
-    name: ""  # Uses chart fullname by default
-    service: ""  # Uses chart fullname by default
-    port: 80  # Service port
-  
+    name: '' # Uses chart fullname by default
+    service: '' # Uses chart fullname by default
+    port: 80 # Service port
+
   # Replica configuration
   replicas:
-    min: 0  # Scale to zero when no traffic (saves resources)
-    max: 10  # Maximum replicas under load
-  
+    min: 0 # Scale to zero when no traffic (saves resources)
+    max: 10 # Maximum replicas under load
+
   # Scaling metric configuration
   scalingMetric:
     # Option 1: Scale based on request rate (requests per second)
     requestRate:
-      targetValue: 100  # Target 100 requests/sec per replica
-      window: "1m"      # Time window for rate calculation
-      granularity: "1s" # Time granularity for rate calculation
-    
+      targetValue: 100 # Target 100 requests/sec per replica
+      window: '1m' # Time window for rate calculation
+      granularity: '1s' # Time granularity for rate calculation
+
     # Option 2: Scale based on concurrent requests (uncomment to use)
     # concurrency:
     #   targetValue: 100  # Target 100 concurrent requests per replica
-  
+
   # Number of pending requests before scaling up
   targetPendingRequests: 100
-  
+
   # Cooldown period before scaling to zero (seconds)
-  cooldownPeriod: 300  # Wait 5 minutes of no traffic before scaling to zero
-  
+  cooldownPeriod: 300 # Wait 5 minutes of no traffic before scaling to zero
+
   # KEDA HTTP Add-on interceptor configuration
   interceptor:
-    namespace: "keda"  # Namespace where KEDA HTTP Add-on is installed
-    service: "keda-add-ons-http-interceptor-proxy"
+    namespace: 'keda' # Namespace where KEDA HTTP Add-on is installed
+    service: 'keda-add-ons-http-interceptor-proxy'
     port: 8080
-    
+
     # Target host for routing (optional)
     # Tells the interceptor which internal service to forward requests to
     # Important: Required when using external domains through Istio Gateway
     # Default (empty): uses <service-name>.<namespace>.svc.cluster.local
-    targetHost: ""
-    
+    targetHost: ''
+
     # Preserve original Host header
     # true: keeps external domain in Host header (e.g., books-api.example.com)
     # false: replaces Host with internal service name
@@ -86,7 +86,7 @@ httpScaledObject:
   #   connect: 30s
   #   responseHeader: 30s
   #   expectContinue: 30s
-  
+
   # Optional: Wait timeout for workload to scale up
   # Increase if seeing "context marked done while waiting for workload reach > 0 replicas"
   # conditionWaitTimeout: 60s
@@ -94,9 +94,9 @@ httpScaledObject:
 # Environment variables
 env:
   - name: NODE_ENV
-    value: "production"
+    value: 'production'
   - name: PORT
-    value: "3000"
+    value: '3000'
 
 # Resource limits
 resources:

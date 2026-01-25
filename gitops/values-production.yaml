@@ -4,7 +4,7 @@
 image:
   repository: ghcr.io/parraletz/books-api
   pullPolicy: IfNotPresent
-  tag: "1.0.0"  # This will be automatically updated by GitHub Actions
+  tag: '1.0.0' # This will be automatically updated by GitHub Actions
 
 replicaCount: 3
 
@@ -15,11 +15,11 @@ service:
 
 ingress:
   enabled: true
-  className: "nginx"
+  className: 'nginx'
   annotations:
-    cert-manager.io/cluster-issuer: "letsencrypt-prod"
-    nginx.ingress.kubernetes.io/ssl-redirect: "true"
-    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+    cert-manager.io/cluster-issuer: 'letsencrypt-prod'
+    nginx.ingress.kubernetes.io/ssl-redirect: 'true'
+    nginx.ingress.kubernetes.io/force-ssl-redirect: 'true'
   hosts:
     - host: books-api.example.com
       paths:
@@ -51,6 +51,6 @@ httpScaledObject:
 
 env:
   - name: NODE_ENV
-    value: "production"
+    value: 'production'
   - name: PORT
-    value: "3000"
+    value: '3000'
