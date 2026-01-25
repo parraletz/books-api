@@ -14,7 +14,6 @@ jobs:
   helm-kyverno-validation:
     name: Helm Template & Kyverno Validation
     runs-on: ubuntu-latest
-    needs: test
 
     steps:
       - name: Checkout code
@@ -52,87 +51,21 @@ jobs:
           fi
 
           # Extract valuesObject from ArgoCD config using Python
-          python3 << 'EOF'
-import yaml
-import sys
-
-try:
-    with open('gitops/books.yaml', 'r') as f:
-        data = yaml.safe_load(f)
-
-    if 'spec' not in data or 'source' not in data['spec'] or 'helm' not in data['spec']['source'] or 'valuesObject' not in data['spec']['source']['helm']:
-        print('::error::valuesObject not found in ArgoCD config')
-        sys.exit(1)
-
-    values_object = data['spec']['source']['helm']['valuesObject']
-
-    # Output as YAML for temp values file
-    yaml.dump(values_object, sys.stdout, default_flow_style=False)
-
-except Exception as e:
-    print(f'::error::Error extracting valuesObject: {e}')
-    sys.exit(1)
-EOF > temp-values.yaml
-
-          if [ $? -ne 0 ]; then
-            echo "::error::Failed to extract valuesObject"
-            exit 1
-          fi
+          python3 -c 'import yaml; import sys; data = yaml.safe_load(open("gitops/books.yaml")); values_object = data["spec"]["source"]["helm"]["valuesObject"]; yaml.dump(values_object, sys.stdout, default_flow_style=False)' > temp-values.yaml || { echo "::error::Failed to extract valuesObject"; exit 1; }
 
           echo "✅ valuesObject extracted to temp-values.yaml"
 
           # Merge with environment-specific values if exists
           if [ -f "gitops/values-$ENV.yaml" ]; then
             echo "🔄 Merging with $ENV values..."
-            python3 << 'EOF'
-import yaml
-
-try:
-    with open('temp-values.yaml', 'r') as f:
-        argocd_values = yaml.safe_load(f)
-
-    with open('gitops/values-$ENV.yaml', 'r') as f:
-        env_values = yaml.safe_load(f)
-
-    # Deep merge: environment values override ArgoCD values
-    def deep_merge(base, override):
-        result = base.copy()
-        for key, value in override.items():
-            if key in result and isinstance(result[key], dict) and isinstance(value, dict):
-                result[key] = deep_merge(result[key], value)
-            else:
-                result[key] = value
-        return result
-
-    merged = deep_merge(argocd_values, env_values)
-    yaml.dump(merged, sys.stdout, default_flow_style=False)
-
-except Exception as e:
-    print(f'::error::Error merging values: {e}')
-    sys.exit(1)
-EOF > merged-values.yaml
+            python3 -c 'import yaml; base=yaml.safe_load(open("temp-values.yaml")); override=yaml.safe_load(open("gitops/values-'"$ENV"'.yaml")); merged={**base, **{k: {**base.get(k, {}), **v} if isinstance(v, dict) and k in base else v for k, v in override.items()}}; yaml.dump(merged, open("merged-values.yaml", "w"), default_flow_style=False)'
             mv merged-values.yaml temp-values.yaml
             echo "✅ Merged with $ENV values"
           fi
 
           # Display key values
           echo "📊 Key values to be used:"
-          python3 << 'EOF'
-import yaml
-
-try:
-    with open('temp-values.yaml', 'r') as f:
-        values = yaml.safe_load(f)
-
-    print('  - Image tag:', values.get('image', {}).get('tag', 'not specified'))
-    print('  - Replicas:', values.get('replicaCount', 'not specified'))
-    print('  - Service type:', values.get('service', {}).get('type', 'not specified'))
-    print('  - Ingress enabled:', values.get('ingress', {}).get('enabled', 'not specified'))
-
-except Exception as e:
-    print(f'Error reading values: {e}')
-    sys.exit(1)
-EOF
+          python3 -c 'import yaml; v=yaml.safe_load(open("temp-values.yaml")); print("  - Image tag:", v.get("image", {}).get("tag", "not specified")); print("  - Replicas:", v.get("replicaCount", "not specified")); print("  - Service type:", v.get("service", {}).get("type", "not specified")); print("  - Ingress enabled:", v.get("ingress", {}).get("enabled", "not specified"))'
 
       - name: Validate Helm chart syntax
         run: |
