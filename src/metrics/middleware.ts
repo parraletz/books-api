@@ -1,21 +1,21 @@
-import type { Context, Next, MiddlewareHandler } from "hono"
+import type { Context, Next, MiddlewareHandler } from 'hono'
 import {
   httpRequestsTotal,
   httpRequestDurationSeconds,
   httpRequestsInFlight,
-} from "./index"
+} from './index'
 
-const EXCLUDED_PATHS = ["/metrics", "/health"]
+const EXCLUDED_PATHS = ['/metrics', '/health']
 
 function normalizePath(path: string): string {
   return path
-    .replace(/\/books\/[a-zA-Z0-9-]+$/, "/books/:id")
-    .replace(/\/[0-9]+$/, "/:id")
+    .replace(/\/books\/[a-zA-Z0-9-]+$/, '/books/:id')
+    .replace(/\/[0-9]+$/, '/:id')
 }
 
 export const metricsMiddleware: MiddlewareHandler = async (
   c: Context,
-  next: Next
+  next: Next,
 ) => {
   const path = normalizePath(c.req.path)
 
@@ -37,7 +37,7 @@ export const metricsMiddleware: MiddlewareHandler = async (
     httpRequestsTotal.inc({ method, path, status_code: statusCode })
     httpRequestDurationSeconds.observe(
       { method, path, status_code: statusCode },
-      durationSeconds
+      durationSeconds,
     )
 
     httpRequestsInFlight.dec()

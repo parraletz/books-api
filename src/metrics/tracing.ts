@@ -1,12 +1,12 @@
-import type { Context, Next, MiddlewareHandler } from "hono"
-import { getTracer } from "./otel"
-import { SpanKind, SpanStatusCode } from "@opentelemetry/api"
+import type { Context, Next, MiddlewareHandler } from 'hono'
+import { getTracer } from './otel'
+import { SpanKind, SpanStatusCode } from '@opentelemetry/api'
 
-const EXCLUDED_PATHS = ["/metrics", "/health"]
+const EXCLUDED_PATHS = ['/metrics', '/health']
 
 export const tracingMiddleware: MiddlewareHandler = async (
   c: Context,
-  next: Next
+  next: Next,
 ) => {
   const path = c.req.path
 
@@ -23,10 +23,10 @@ export const tracingMiddleware: MiddlewareHandler = async (
     {
       kind: SpanKind.SERVER,
       attributes: {
-        "http.method": method,
-        "http.url": c.req.url,
-        "http.route": path,
-        "http.user_agent": c.req.header("user-agent") || "unknown",
+        'http.method': method,
+        'http.url': c.req.url,
+        'http.route': path,
+        'http.user_agent': c.req.header('user-agent') || 'unknown',
       },
     },
     async (span) => {
@@ -34,7 +34,7 @@ export const tracingMiddleware: MiddlewareHandler = async (
         await next()
 
         const statusCode = c.res.status
-        span.setAttribute("http.status_code", statusCode)
+        span.setAttribute('http.status_code', statusCode)
 
         if (statusCode >= 400) {
           span.setStatus({
@@ -47,13 +47,13 @@ export const tracingMiddleware: MiddlewareHandler = async (
       } catch (error) {
         span.setStatus({
           code: SpanStatusCode.ERROR,
-          message: error instanceof Error ? error.message : "Unknown error",
+          message: error instanceof Error ? error.message : 'Unknown error',
         })
         span.recordException(error as Error)
         throw error
       } finally {
         span.end()
       }
-    }
+    },
   )
 }
